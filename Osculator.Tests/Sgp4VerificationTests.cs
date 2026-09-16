@@ -58,7 +58,14 @@ public sealed class Sgp4VerificationTests
 	/// </remarks>
 	private const double VelocityToleranceKmPerSecond = 1e-9;
 
-	private static string DataDirectory => Path.Combine(AppContext.BaseDirectory, "Data");
+	/// <summary>Gets the directory the committed verification vectors are copied to.</summary>
+	/// <remarks>
+	/// <see cref="Path.Join(string, string)"/> rather than <see cref="Path.Combine(string, string)"/>
+	/// throughout this file: <c>Combine</c> discards everything before a rooted later segment, and
+	/// while every segment here is a string literal that cannot be rooted, <c>Join</c> is the right
+	/// default when the later segment is known to be relative and costs nothing.
+	/// </remarks>
+	private static string DataDirectory => Path.Join(AppContext.BaseDirectory, "Data");
 
 	[TestMethod]
 	public void NearEarthCases_MatchThePublishedVectors()
@@ -155,7 +162,7 @@ public sealed class Sgp4VerificationTests
 
 	private static List<Case> ReadCases()
 	{
-		string[] lines = File.ReadAllLines(Path.Combine(DataDirectory, "SGP4-VER.TLE"));
+		string[] lines = File.ReadAllLines(Path.Join(DataDirectory, "SGP4-VER.TLE"));
 		List<Case> cases = [];
 		string? pending = null;
 
@@ -194,7 +201,7 @@ public sealed class Sgp4VerificationTests
 
 	private static List<IReadOnlyList<Expected>> ReadExpected()
 	{
-		string[] lines = File.ReadAllLines(Path.Combine(DataDirectory, "sgp4-ver-expected.out"));
+		string[] lines = File.ReadAllLines(Path.Join(DataDirectory, "sgp4-ver-expected.out"));
 		List<IReadOnlyList<Expected>> blocks = [];
 		List<Expected>? current = null;
 
