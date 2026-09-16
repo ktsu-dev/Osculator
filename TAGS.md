@@ -1,0 +1,1 @@
+satellites;orbital mechanics;astrodynamics;SGP4;TLE;two-line element;OMM;space debris;NASA;NORAD;CelesTrak;Space-Track;satellite laser ranging;SP3;ephemeris;orbit propagation;error budget;numerical precision;arbitrary precision;floating point;round-off error;dimensional analysis;units of measure;Dear ImGui;visualization;dotnet;csharp
