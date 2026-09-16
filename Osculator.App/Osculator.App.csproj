@@ -1,0 +1,30 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+  <Sdk Name="ktsu.Sdk.App" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <RootNamespace>ktsu.Osculator.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ktsu.ImGui.App" />
+    <PackageReference Include="ktsu.ImGui.Widgets" />
+    <PackageReference Include="Hexa.NET.ImGui" />
+    <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
+         entire integration; no initialization code is needed. -->
+    <PackageReference Include="Hexa.NET.ImPlot" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- All four, which is the reason they are separate projects: the alias packages are global
+         usings and only one storage type can win per project. -->
+    <ProjectReference Include="..\Osculator.Storage.Double\Osculator.Storage.Double.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Float\Osculator.Storage.Float.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Decimal\Osculator.Storage.Decimal.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Precise\Osculator.Storage.Precise.csproj" />
+  </ItemGroup>
+</Project>

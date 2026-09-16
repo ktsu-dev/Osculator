@@ -1,0 +1,29 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net9.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The one alias package whose storage type comes from a package rather than a C# keyword,
+         so it carries a PackageReference the other three do not. -->
+    <!-- PrivateAssets stops the alias flowing to consumers. The alias packages ship a
+         buildTransitive props file, so without this every project referencing two or more
+         facades inherits two or more full sets of global usings and fails with hundreds of
+         CS1537 alias collisions, far from the cause. The binding is an implementation detail
+         of this facade, not part of its contract. -->
+    <PackageReference Include="ktsu.Semantics.Quantities.Precise" PrivateAssets="all" />
+    <!-- The quantity types themselves. The alias package supplies only the global usings that
+         bind them to one storage type, so the types arrive transitively and must be referenced. -->
+    <PackageReference Include="ktsu.Semantics.Quantities" />
+    <PackageReference Include="ktsu.PreciseNumber" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
+    <ProjectReference Include="..\Osculator.Math.Precise\Osculator.Math.Precise.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,28 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net9.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Exactly one alias package. Its global usings bind every quantity in this project to
+         float, which is why binding four storage types takes four projects. -->
+    <!-- PrivateAssets stops the alias flowing to consumers. The alias packages ship a
+         buildTransitive props file, so without this every project referencing two or more
+         facades inherits two or more full sets of global usings and fails with hundreds of
+         CS1537 alias collisions, far from the cause. The binding is an implementation detail
+         of this facade, not part of its contract. -->
+    <PackageReference Include="ktsu.Semantics.Quantities.Float" PrivateAssets="all" />
+    <!-- The quantity types themselves. The alias package supplies only the global usings that
+         bind them to one storage type, so the types arrive transitively and must be referenced. -->
+    <PackageReference Include="ktsu.Semantics.Quantities" />
+
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
+  </ItemGroup>
+</Project>
