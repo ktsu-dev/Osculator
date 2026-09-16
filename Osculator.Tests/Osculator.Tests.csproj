@@ -1,0 +1,22 @@
+<Project>
+  <Sdk Name="MSTest.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <RootNamespace>ktsu.Osculator.Tests</RootNamespace>
+    <AssemblyName>$(RootNamespace)</AssemblyName>
+    <EnableSourceLink>false</EnableSourceLink>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
+    <ProjectReference Include="..\Osculator.Data\Osculator.Data.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Double\Osculator.Storage.Double.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Float\Osculator.Storage.Float.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Decimal\Osculator.Storage.Decimal.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Precise\Osculator.Storage.Precise.csproj" />
+  </ItemGroup>
+</Project>

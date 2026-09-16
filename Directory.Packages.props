@@ -1,0 +1,36 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Test packages: CodeCoverage and TrxReport versions are supplied by MSTest.Sdk;
+         do not pin them here or CPM reports duplicate PackageVersion items (NU1506). -->
+    <PackageVersion Include="Polyfill" Version="11.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The quantity vocabulary. Osculator.Core references the core package and uses the open
+         generics; the four storage facades each reference exactly one alias package, because the
+         aliases are global usings and only one storage type can win per project. -->
+    <PackageVersion Include="ktsu.Semantics.Quantities" Version="5.3.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Double" Version="5.3.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Float" Version="5.3.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Decimal" Version="5.3.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Precise" Version="5.3.1" />
+    <!-- The reference arithmetic. See PreciseNumber#78: it implements INumber<T> and nothing
+         else, so Osculator.Math.Precise supplies the transcendentals SGP4 needs until that lands. -->
+    <PackageVersion Include="ktsu.PreciseNumber" Version="2.0.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- UI -->
+    <PackageVersion Include="ktsu.ImGui.App" Version="3.37.0" />
+    <PackageVersion Include="ktsu.ImGui.Widgets" Version="3.37.0" />
+    <PackageVersion Include="Hexa.NET.ImGui" Version="2.2.9" />
+    <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
+         entire integration. -->
+    <PackageVersion Include="Hexa.NET.ImPlot" Version="2.2.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="BenchmarkDotNet.Annotations" Version="0.15.8" />
+  </ItemGroup>
+</Project>

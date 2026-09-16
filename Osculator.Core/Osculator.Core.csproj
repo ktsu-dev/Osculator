@@ -1,0 +1,15 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net9.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The open generics, not an alias package. The alias packages bind every quantity to one
+         storage type project-wide, and this project is generic over all of them. -->
+    <PackageReference Include="ktsu.Semantics.Quantities" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

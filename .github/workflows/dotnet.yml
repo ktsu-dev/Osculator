@@ -1,0 +1,51 @@
+name: .NET
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  pull_request:
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "10.0"
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}.x
+
+      - name: Restore
+        run: dotnet restore Osculator.sln
+
+      - name: Build
+        run: dotnet build Osculator.sln --configuration Release --no-restore
+
+      # ktsu.Sdk raises its analyzers to errors, so a warning-clean build is already enforced above.
+      - name: Test
+        run: dotnet test Osculator.sln --configuration Release --no-build
+
+      # Not a benchmark run — BenchmarkDotNet on a shared runner measures the runner, not the code.
+      # This only proves the project still compiles and its switcher resolves.
+      - name: Verify benchmarks host
+        run: dotnet run --project Osculator.Benchmarks --configuration Release --no-build -- --list flat

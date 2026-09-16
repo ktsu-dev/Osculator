@@ -1,0 +1,33 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <!-- BenchmarkDotNet finds the project that produced a benchmark assembly by matching the
+         assembly name against .csproj file names. ktsu.Sdk would otherwise name the output
+         ktsu.Osculator.Benchmarks, which matches no project file. -->
+    <AssemblyName>Osculator.Benchmarks</AssemblyName>
+    <RootNamespace>ktsu.Osculator.Benchmarks</RootNamespace>
+    <!-- Benchmarks are tooling: not shipped, and not something unit tests cover. -->
+    <SonarQubeExclude>true</SonarQubeExclude>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="BenchmarkDotNet.Annotations" />
+    <!-- Used directly here, and reachable only transitively through the Precise facade, which
+         keeps its alias package private. -->
+    <PackageReference Include="ktsu.PreciseNumber" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Storage.Double\Osculator.Storage.Double.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Float\Osculator.Storage.Float.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Decimal\Osculator.Storage.Decimal.csproj" />
+    <ProjectReference Include="..\Osculator.Storage.Precise\Osculator.Storage.Precise.csproj" />
+  </ItemGroup>
+</Project>
