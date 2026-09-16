@@ -189,9 +189,16 @@ JSON. Verified live:
   "MEAN_MOTION_DOT":5.779e-5,"MEAN_MOTION_DDOT":0,"NORAD_CAT_ID":25544}]
 ```
 
-Note that the JSON does not *add* precision over the fixed-width TLE — `MEAN_MOTION` still
-carries 8 decimals and `ECCENTRICITY` 7. The quantization is identical; the JSON merely stops
-hiding it. The Δ_data analysis reads these fields directly.
+The JSON is generated from the originating values rather than by re-reading the text, so it is
+**not** simply a more legible container for the same digits. Measured on one ISS element set carried
+in both formats at the same epoch: `MEAN_MOTION` and `MEAN_MOTION_DOT` are identical, `ECCENTRICITY`
+gains a digit (0.0004923 against 0.00049233), and `BSTAR` gains three — five significant digits in
+the text against eight in the JSON, because the text writes it as a five-digit mantissa with an
+assumed decimal point and a one-digit exponent.
+
+So Δ_data depends on which representation was ingested, and an application mixing the two is
+comparing element sets of different precision. Osculator reads OMM wherever both are available, and
+records which format each element set came from.
 
 `https://celestrak.org/pub/satcat.csv` supplies object metadata (name, type, launch,
 RCS size, decay date). CelesTrak's usage guidelines ask for caching and no more than one
