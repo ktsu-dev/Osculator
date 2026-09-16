@@ -11,8 +11,20 @@ using System.Collections.Generic;
 /// <para>
 /// This is the foundation of the data error term. A two-line element set is a fixed-column text
 /// format, so each field carries a specific, knowable number of digits and nothing finer survives
-/// the round trip. The OMM JSON distributed by CelesTrak does not add precision — it carries the
-/// same digits in a more legible container — so these steps apply to either form.
+/// the round trip.
+/// </para>
+/// <para>
+/// <strong>These steps describe the two-line format. The OMM JSON is not always equivalent.</strong>
+/// The distributed JSON is generated from the originating values rather than by re-reading the text,
+/// so the fields the text format compresses come through finer. Measured on one ISS element set:
+/// mean motion and the first derivative are identical in both, eccentricity gains one digit
+/// (0.0004923 against 0.00049233), and the drag term gains three (0.00012172 against 0.00012172288,
+/// five significant digits against eight).
+/// </para>
+/// <para>
+/// So the data error term depends on which representation was ingested, and an application that
+/// mixes the two is comparing element sets of different precision. Read the source format off the
+/// data rather than assuming, and prefer OMM where both are available.
 /// </para>
 /// <para>
 /// The steps are exact properties of the format, not estimates. What is <em>not</em> known here is
@@ -29,6 +41,7 @@ public static class ElementFieldQuantization
 	public static double MeanMotion => 1e-8;
 
 	/// <summary>Gets the eccentricity step, dimensionless. Columns 27-33 of line 2 carry seven digits with an assumed leading decimal point.</summary>
+	/// <remarks>The OMM JSON carries one further digit for this field; see the remarks on this class.</remarks>
 	public static double Eccentricity => 1e-7;
 
 	/// <summary>Gets the inclination step, in degrees. Columns 9-16 of line 2 carry four decimals.</summary>
@@ -53,7 +66,9 @@ public static class ElementFieldQuantization
 	/// <remarks>
 	/// <see cref="ElementSet.BStar"/> and <see cref="ElementSet.MeanMotionDdot"/> are written as a
 	/// five-digit mantissa with an assumed leading decimal point and a single-digit exponent, so
-	/// their step is a fraction of the value rather than a fixed increment.
+	/// their step is a fraction of the value rather than a fixed increment. This is the field the two
+	/// distributed formats disagree about most: the OMM JSON carries eight significant digits where
+	/// the text carries five.
 	/// </remarks>
 	public static int ExponentialFieldSignificantDigits => 5;
 

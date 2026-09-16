@@ -4,9 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-**There is no code yet.** This repository currently holds a design specification,
-[`docs/spec.md`](docs/spec.md), and nothing else. Read it before writing anything — it settles
+M1 in progress. Read [`docs/spec.md`](docs/spec.md) before writing anything — it settles
 architecture, data sources, propagators, the error decomposition, and the validation gates.
+
+**The near-earth SGP4 path is implemented and passes the published verification vectors** at
+7.3e-9 km on position and 7.8e-10 km/s on velocity, against a specified tolerance of 1e-8 km.
+**The deep-space path is not implemented**: an orbital period of 225 minutes or more reports
+`Sgp4Error.DeepSpaceNotImplemented` rather than quietly returning a near-earth answer. Twenty-five
+of the thirty-four verification cases are deep-space, so most of the suite is not yet exercised.
 
 Every quantitative figure in the spec is a **projection**, not a measurement. Do not quote them as
 results. Milestone M5 is where measurements replace them.
@@ -30,8 +35,6 @@ claim is false and the spec explains why at length.
 
 ## Build commands
 
-None yet. When projects exist they will follow the ktsu conventions used across the sibling repos:
-
 ```bash
 dotnet restore
 dotnet build
@@ -53,6 +56,12 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
 | `Osculator.Benchmarks` | BenchmarkDotNet, cost per propagation per storage type |
+
+Run one verification case with
+`dotnet test --filter "FullyQualifiedName~Sgp4Verification"`. The suite prints its worst position
+and velocity error, but the runner only shows stdout for tests it renders a block for — i.e.
+failing ones — so to see the figures on a pass, run the test executable directly with
+`--show-stdout All`.
 
 ### Why the storage facades are separate projects
 
@@ -81,6 +90,16 @@ Five things that are easy to get wrong here and expensive to debug.
    ~48 µs. That is why the two-part Julian Date exists. In `PreciseNumber` it is exact.
 5. **Residuals belong in RIC/RSW**, not XYZ. Orbital error is overwhelmingly along-track — essentially
    a timing error — and XYZ scrambles that across three axes rotating with the orbit.
+6. **The OMM JSON carries more precision than the two-line text for some fields.** The JSON is
+   generated from the originating values rather than by re-reading the text, so eccentricity gains a
+   digit and the drag term gains three (five significant digits in the text, eight in the JSON).
+   Mean motion and its first derivative are identical. So Δ_data depends on which representation was
+   ingested, and mixing the two compares element sets of different precision. `TleParserTests`
+   pins this with the same ISS element set committed in both forms.
+7. **SGP4's velocity unit is not its position unit.** Position converts by the Earth's radius;
+   velocity by `radius * xke / 60`. Dropping `xke` leaves position perfect and velocity wrong by a
+   factor of 13.45 — which is precisely the defect the verification suite caught during M1, and the
+   reason position and velocity are asserted separately.
 
 ## Upstream dependencies
 
@@ -140,5 +159,8 @@ suppressions possible.
 
 ## CI/CD
 
-Not yet configured. Auto-generated files (`VERSION.md`, `CHANGELOG.md`, `LICENSE.md`) are produced by
-the pipeline and should never be edited manually.
+`.github/workflows/dotnet.yml` restores, builds Release, tests, and checks the benchmark host
+resolves, on Linux. It is deliberately **not** the full ktsu release pipeline the sibling
+repositories run: there is no package to version, tag or publish, and that pipeline would fail
+trying. Auto-generated files (`VERSION.md`, `CHANGELOG.md`, `LICENSE.md`) are produced by a release
+pipeline and should never be edited manually.

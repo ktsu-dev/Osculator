@@ -12,6 +12,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The SGP4 verification vectors. Committed rather than fetched: the suite is worthless if it
+         only runs with a network, and the files are small and stable. -->
+    <None Update="Data\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
     <ProjectReference Include="..\Osculator.Data\Osculator.Data.csproj" />
     <ProjectReference Include="..\Osculator.Storage.Double\Osculator.Storage.Double.csproj" />
