@@ -16,6 +16,10 @@ public sealed class DoubleStorageMath : IStorageMath<double>
 	public double Pi => Math.PI;
 
 	/// <inheritdoc />
+	/// <remarks>The identity: double rounds every result into its own width already.</remarks>
+	public double ToWorkingPrecision(double value) => value;
+
+	/// <inheritdoc />
 	public double Sqrt(double value) => Math.Sqrt(value);
 
 	/// <inheritdoc />

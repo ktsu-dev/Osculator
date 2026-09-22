@@ -22,6 +22,10 @@ public sealed class FloatStorageMath : IStorageMath<float>
 	public float Pi => MathF.PI;
 
 	/// <inheritdoc />
+	/// <remarks>The identity: float rounds every result into its own width already.</remarks>
+	public float ToWorkingPrecision(float value) => value;
+
+	/// <inheritdoc />
 	public float Sqrt(float value) => MathF.Sqrt(value);
 
 	/// <inheritdoc />

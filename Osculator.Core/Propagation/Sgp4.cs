@@ -89,17 +89,17 @@ public static class Sgp4<T>
 		T del = d1 / (ak * ak);
 		T adel = ak * (T.One - (del * del) - (del * ((T.One / N(3)) + (N(134) * del * del / N(81)))));
 		del = d1 / (adel * adel);
-		sat.MeanMotion = sat.MeanMotionKozai / (T.One + del);
+		sat.MeanMotion = math.ToWorkingPrecision(sat.MeanMotionKozai / (T.One + del));
 
 		T ao = math.Pow(xke / sat.MeanMotion, x2o3);
 		T sinio = math.Sin(inclo);
 		T po = ao * omeosq;
 		T con42 = T.One - (N(5) * cosio2);
-		sat.Con41 = -con42 - cosio2 - cosio2;
+		sat.Con41 = math.ToWorkingPrecision(-con42 - cosio2 - cosio2);
 		T posq = po * po;
 		T rp = ao * (T.One - ecco);
 
-		sat.SemiMajorAxis = math.Pow(sat.MeanMotion / xke, -x2o3);
+		sat.SemiMajorAxis = math.ToWorkingPrecision(math.Pow(sat.MeanMotion / xke, -x2o3));
 
 		// An orbital period at or beyond the deep-space boundary selects the lunar-solar and
 		// resonance terms in DeepSpace<T> in place of part of what follows.
@@ -134,7 +134,7 @@ public static class Sgp4<T>
 
 		T pinvsq = T.One / posq;
 		T tsi = T.One / (ao - sfour);
-		sat.Eta = ao * ecco * tsi;
+		sat.Eta = math.ToWorkingPrecision(ao * ecco * tsi);
 		T etasq = sat.Eta * sat.Eta;
 		T eeta = ecco * sat.Eta;
 		T psisq = T.Abs(T.One - etasq);
@@ -143,7 +143,7 @@ public static class Sgp4<T>
 
 		T cc2 = coef1 * sat.MeanMotion * ((ao * (T.One + (N(1.5) * etasq) + (eeta * (N(4) + etasq))))
 			+ (N(0.375) * j2 * tsi / psisq * sat.Con41 * (N(8) + (N(3) * etasq * (N(8) + etasq)))));
-		sat.Cc1 = sat.BStar * cc2;
+		sat.Cc1 = math.ToWorkingPrecision(sat.BStar * cc2);
 
 		T cc3 = T.Zero;
 
@@ -152,54 +152,54 @@ public static class Sgp4<T>
 			cc3 = -two * coef * tsi * Wgs72<T>.J3OverJ2 * sat.MeanMotion * sinio / ecco;
 		}
 
-		sat.X1mth2 = T.One - cosio2;
+		sat.X1mth2 = math.ToWorkingPrecision(T.One - cosio2);
 
-		sat.Cc4 = two * sat.MeanMotion * coef1 * ao * omeosq * ((sat.Eta * (two + (N(0.5) * etasq)))
-			+ (ecco * (N(0.5) + (two * etasq)))
-			- (j2 * tsi / (ao * psisq) * ((-N(3) * sat.Con41 * (T.One - (two * eeta) + (etasq * (N(1.5) - (N(0.5) * eeta)))))
-				+ (N(0.75) * sat.X1mth2 * ((two * etasq) - (eeta * (T.One + etasq))) * math.Cos(two * sat.ArgumentOfPerigee)))));
+		sat.Cc4 = math.ToWorkingPrecision(two * sat.MeanMotion * coef1 * ao * omeosq * ((sat.Eta * (two + (N(0.5) * etasq)))
+				+ (ecco * (N(0.5) + (two * etasq)))
+				- (j2 * tsi / (ao * psisq) * ((-N(3) * sat.Con41 * (T.One - (two * eeta) + (etasq * (N(1.5) - (N(0.5) * eeta)))))
+					+ (N(0.75) * sat.X1mth2 * ((two * etasq) - (eeta * (T.One + etasq))) * math.Cos(two * sat.ArgumentOfPerigee))))));
 
-		sat.Cc5 = two * coef1 * ao * omeosq * (T.One + (N(2.75) * (etasq + eeta)) + (eeta * etasq));
+		sat.Cc5 = math.ToWorkingPrecision(two * coef1 * ao * omeosq * (T.One + (N(2.75) * (etasq + eeta)) + (eeta * etasq)));
 
 		T cosio4 = cosio2 * cosio2;
 		T temp1 = N(1.5) * j2 * pinvsq * sat.MeanMotion;
 		T temp2 = N(0.5) * temp1 * j2 * pinvsq;
 		T temp3 = -N(0.46875) * Wgs72<T>.J4 * pinvsq * pinvsq * sat.MeanMotion;
 
-		sat.MDot = sat.MeanMotion + (N(0.5) * temp1 * rteosq * sat.Con41)
-			+ (N(0.0625) * temp2 * rteosq * (N(13) - (N(78) * cosio2) + (N(137) * cosio4)));
+		sat.MDot = math.ToWorkingPrecision(sat.MeanMotion + (N(0.5) * temp1 * rteosq * sat.Con41)
+				+ (N(0.0625) * temp2 * rteosq * (N(13) - (N(78) * cosio2) + (N(137) * cosio4))));
 
-		sat.ArgpDot = (-N(0.5) * temp1 * con42)
-			+ (N(0.0625) * temp2 * (N(7) - (N(114) * cosio2) + (N(395) * cosio4)))
-			+ (temp3 * (N(3) - (N(36) * cosio2) + (N(49) * cosio4)));
+		sat.ArgpDot = math.ToWorkingPrecision((-N(0.5) * temp1 * con42)
+				+ (N(0.0625) * temp2 * (N(7) - (N(114) * cosio2) + (N(395) * cosio4)))
+				+ (temp3 * (N(3) - (N(36) * cosio2) + (N(49) * cosio4))));
 
 		T xhdot1 = -temp1 * cosio;
-		sat.NodeDot = xhdot1 + (((N(0.5) * temp2 * (N(4) - (N(19) * cosio2)))
-			+ (two * temp3 * (N(3) - (N(7) * cosio2)))) * cosio);
+		sat.NodeDot = math.ToWorkingPrecision(xhdot1 + (((N(0.5) * temp2 * (N(4) - (N(19) * cosio2)))
+				+ (two * temp3 * (N(3) - (N(7) * cosio2)))) * cosio));
 
-		sat.Omgcof = sat.BStar * cc3 * math.Cos(sat.ArgumentOfPerigee);
+		sat.Omgcof = math.ToWorkingPrecision(sat.BStar * cc3 * math.Cos(sat.ArgumentOfPerigee));
 		sat.Xmcof = T.Zero;
 
 		if (ecco > N(1e-4))
 		{
-			sat.Xmcof = -x2o3 * coef * sat.BStar / eeta;
+			sat.Xmcof = math.ToWorkingPrecision(-x2o3 * coef * sat.BStar / eeta);
 		}
 
-		sat.Nodecf = N(3.5) * omeosq * xhdot1 * sat.Cc1;
-		sat.T2cof = N(1.5) * sat.Cc1;
+		sat.Nodecf = math.ToWorkingPrecision(N(3.5) * omeosq * xhdot1 * sat.Cc1);
+		sat.T2cof = math.ToWorkingPrecision(N(1.5) * sat.Cc1);
 
 		// A retrograde orbit at exactly 180 degrees would divide by zero here.
 		T oneMinusCos = T.Abs(cosio + T.One);
 		T guard = N(1.5e-12);
-		sat.Xlcof = -N(0.25) * Wgs72<T>.J3OverJ2 * sinio * (N(3) + (N(5) * cosio))
-			/ (oneMinusCos > guard ? T.One + cosio : guard);
+		sat.Xlcof = math.ToWorkingPrecision(-N(0.25) * Wgs72<T>.J3OverJ2 * sinio * (N(3) + (N(5) * cosio))
+				/ (oneMinusCos > guard ? T.One + cosio : guard));
 
-		sat.Aycof = -N(0.5) * Wgs72<T>.J3OverJ2 * sinio;
+		sat.Aycof = math.ToWorkingPrecision(-N(0.5) * Wgs72<T>.J3OverJ2 * sinio);
 
 		T delmotemp = T.One + (sat.Eta * math.Cos(sat.MeanAnomaly));
-		sat.Delmo = delmotemp * delmotemp * delmotemp;
-		sat.Sinmao = math.Sin(sat.MeanAnomaly);
-		sat.X7thm1 = (N(7) * cosio2) - T.One;
+		sat.Delmo = math.ToWorkingPrecision(delmotemp * delmotemp * delmotemp);
+		sat.Sinmao = math.ToWorkingPrecision(math.Sin(sat.MeanAnomaly));
+		sat.X7thm1 = math.ToWorkingPrecision((N(7) * cosio2) - T.One);
 
 		if (sat.IsDeepSpace)
 		{
@@ -208,7 +208,7 @@ public static class Sgp4<T>
 			sat.IsSimplified = true;
 
 			double epochDays = elements.EpochJulianDate.DaysSinceSgp4DayZero;
-			sat.Gsto = DeepSpace<T>.GreenwichSiderealTime(N(epochDays + JulianDate.Sgp4DayZero), math);
+			sat.Gsto = math.ToWorkingPrecision(DeepSpace<T>.GreenwichSiderealTime(N(epochDays + JulianDate.Sgp4DayZero), math));
 
 			DeepSpaceCommon<T> common = DeepSpace<T>.InitializeCommon(sat, N(epochDays), math);
 			DeepSpace<T>.InitializeResonance(sat, common, sat.ArgpDot + sat.NodeDot, math);
@@ -217,14 +217,14 @@ public static class Sgp4<T>
 		if (!sat.IsSimplified)
 		{
 			T cc1sq = sat.Cc1 * sat.Cc1;
-			sat.D2 = N(4) * ao * tsi * cc1sq;
+			sat.D2 = math.ToWorkingPrecision(N(4) * ao * tsi * cc1sq);
 			T temp = sat.D2 * tsi * sat.Cc1 / N(3);
-			sat.D3 = ((N(17) * ao) + sfour) * temp;
-			sat.D4 = N(0.5) * temp * ao * tsi * ((N(221) * ao) + (N(31) * sfour)) * sat.Cc1;
-			sat.T3cof = sat.D2 + (two * cc1sq);
-			sat.T4cof = N(0.25) * ((N(3) * sat.D3) + (sat.Cc1 * ((N(12) * sat.D2) + (N(10) * cc1sq))));
-			sat.T5cof = N(0.2) * ((N(3) * sat.D4) + (N(12) * sat.Cc1 * sat.D3) + (N(6) * sat.D2 * sat.D2)
-				+ (N(15) * cc1sq * ((two * sat.D2) + cc1sq)));
+			sat.D3 = math.ToWorkingPrecision(((N(17) * ao) + sfour) * temp);
+			sat.D4 = math.ToWorkingPrecision(N(0.5) * temp * ao * tsi * ((N(221) * ao) + (N(31) * sfour)) * sat.Cc1);
+			sat.T3cof = math.ToWorkingPrecision(sat.D2 + (two * cc1sq));
+			sat.T4cof = math.ToWorkingPrecision(N(0.25) * ((N(3) * sat.D3) + (sat.Cc1 * ((N(12) * sat.D2) + (N(10) * cc1sq)))));
+			sat.T5cof = math.ToWorkingPrecision(N(0.2) * ((N(3) * sat.D4) + (N(12) * sat.Cc1 * sat.D3) + (N(6) * sat.D2 * sat.D2)
+					+ (N(15) * cc1sq * ((two * sat.D2) + cc1sq))));
 		}
 
 		return sat;
@@ -266,9 +266,9 @@ public static class Sgp4<T>
 		T mm = xmdf;
 		T t2 = t * t;
 		T nodem = nodedf + (satellite.Nodecf * t2);
-		T tempa = T.One - (satellite.Cc1 * t);
-		T tempe = satellite.BStar * satellite.Cc4 * t;
-		T templ = satellite.T2cof * t2;
+		T tempa = math.ToWorkingPrecision(T.One - (satellite.Cc1 * t));
+		T tempe = math.ToWorkingPrecision(satellite.BStar * satellite.Cc4 * t);
+		T templ = math.ToWorkingPrecision(satellite.T2cof * t2);
 
 		if (!satellite.IsSimplified)
 		{
@@ -280,9 +280,9 @@ public static class Sgp4<T>
 			argpm = argpdf - temp;
 			T t3 = t2 * t;
 			T t4 = t3 * t;
-			tempa = tempa - (satellite.D2 * t2) - (satellite.D3 * t3) - (satellite.D4 * t4);
-			tempe += satellite.BStar * satellite.Cc5 * (math.Sin(mm) - satellite.Sinmao);
-			templ = templ + (satellite.T3cof * t3) + (t4 * (satellite.T4cof + (t * satellite.T5cof)));
+			tempa = math.ToWorkingPrecision(tempa - (satellite.D2 * t2) - (satellite.D3 * t3) - (satellite.D4 * t4));
+			tempe = math.ToWorkingPrecision(tempe + (satellite.BStar * satellite.Cc5 * (math.Sin(mm) - satellite.Sinmao)));
+			templ = math.ToWorkingPrecision(templ + (satellite.T3cof * t3) + (t4 * (satellite.T4cof + (t * satellite.T5cof))));
 		}
 
 		T nm = satellite.MeanMotion;
@@ -310,7 +310,7 @@ public static class Sgp4<T>
 			return new(Sgp4Error.MeanMotionNotPositive, default);
 		}
 
-		T am = math.Pow(xke / nm, x2o3) * tempa * tempa;
+		T am = math.ToWorkingPrecision(math.Pow(xke / nm, x2o3) * tempa * tempa);
 		nm = xke / math.Pow(am, N(1.5));
 		em -= tempe;
 
@@ -422,7 +422,7 @@ public static class Sgp4<T>
 				tem5 = tem5 > T.Zero ? limit : -limit;
 			}
 
-			eo1 += tem5;
+			eo1 = math.ToWorkingPrecision(eo1 + tem5);
 		}
 
 		// Short-period periodics.
@@ -482,12 +482,12 @@ public static class Sgp4<T>
 		T speed = radius * xke / N(60);
 
 		TemeState<T> state = new(
-			mrt * ux * radius,
-			mrt * uy * radius,
-			mrt * uz * radius,
-			((mvt * ux) + (rvdot * vx)) * speed,
-			((mvt * uy) + (rvdot * vy)) * speed,
-			((mvt * uz) + (rvdot * vz)) * speed);
+			math.ToWorkingPrecision(mrt * ux * radius),
+			math.ToWorkingPrecision(mrt * uy * radius),
+			math.ToWorkingPrecision(mrt * uz * radius),
+			math.ToWorkingPrecision(((mvt * ux) + (rvdot * vx)) * speed),
+			math.ToWorkingPrecision(((mvt * uy) + (rvdot * vy)) * speed),
+			math.ToWorkingPrecision(((mvt * uz) + (rvdot * vz)) * speed));
 
 		return mrt < T.One ? new(Sgp4Error.Decayed, state) : new(Sgp4Error.None, state);
 	}

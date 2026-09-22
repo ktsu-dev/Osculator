@@ -53,6 +53,9 @@ public sealed class PreciseStorageMath(int significantDigits) : IStorageMath<Pre
 	public PreciseNumber Pi => PreciseNumber.Pi;
 
 	/// <inheritdoc />
+	public PreciseNumber ToWorkingPrecision(PreciseNumber value) => value.ReduceSignificance(SignificantDigits);
+
+	/// <inheritdoc />
 	public PreciseNumber Sqrt(PreciseNumber value) => PreciseNumber.Sqrt(value, SignificantDigits);
 
 	/// <inheritdoc />

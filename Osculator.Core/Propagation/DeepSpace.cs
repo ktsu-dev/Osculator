@@ -244,36 +244,36 @@ internal static class DeepSpace<T>
 			cc = N(4.7968065e-7);
 		}
 
-		satellite.Zmol = (N(4.7199672) + (N(0.22997150) * day) - gam) % twoPi;
-		satellite.Zmos = (N(6.2565837) + (N(0.017201977) * day)) % twoPi;
+		satellite.Zmol = math.ToWorkingPrecision((N(4.7199672) + (N(0.22997150) * day) - gam) % twoPi);
+		satellite.Zmos = math.ToWorkingPrecision((N(6.2565837) + (N(0.017201977) * day)) % twoPi);
 
 		T zes = N(SolarEccentricity);
-		satellite.Se2 = two * ss1 * ss6;
-		satellite.Se3 = two * ss1 * ss7;
-		satellite.Si2 = two * ss2 * sz12;
-		satellite.Si3 = two * ss2 * (sz13 - sz11);
-		satellite.Sl2 = -two * ss3 * sz2;
-		satellite.Sl3 = -two * ss3 * (sz3 - sz1);
-		satellite.Sl4 = -two * ss3 * (-N(21) - (N(9) * emsq)) * zes;
-		satellite.Sgh2 = two * ss4 * sz32;
-		satellite.Sgh3 = two * ss4 * (sz33 - sz31);
-		satellite.Sgh4 = -N(18) * ss4 * zes;
-		satellite.Sh2 = -two * ss2 * sz22;
-		satellite.Sh3 = -two * ss2 * (sz23 - sz21);
+		satellite.Se2 = math.ToWorkingPrecision(two * ss1 * ss6);
+		satellite.Se3 = math.ToWorkingPrecision(two * ss1 * ss7);
+		satellite.Si2 = math.ToWorkingPrecision(two * ss2 * sz12);
+		satellite.Si3 = math.ToWorkingPrecision(two * ss2 * (sz13 - sz11));
+		satellite.Sl2 = math.ToWorkingPrecision(-two * ss3 * sz2);
+		satellite.Sl3 = math.ToWorkingPrecision(-two * ss3 * (sz3 - sz1));
+		satellite.Sl4 = math.ToWorkingPrecision(-two * ss3 * (-N(21) - (N(9) * emsq)) * zes);
+		satellite.Sgh2 = math.ToWorkingPrecision(two * ss4 * sz32);
+		satellite.Sgh3 = math.ToWorkingPrecision(two * ss4 * (sz33 - sz31));
+		satellite.Sgh4 = math.ToWorkingPrecision(-N(18) * ss4 * zes);
+		satellite.Sh2 = math.ToWorkingPrecision(-two * ss2 * sz22);
+		satellite.Sh3 = math.ToWorkingPrecision(-two * ss2 * (sz23 - sz21));
 
 		T zel = N(LunarEccentricity);
-		satellite.Ee2 = two * s1 * s6;
-		satellite.E3 = two * s1 * s7;
-		satellite.Xi2 = two * s2 * z12;
-		satellite.Xi3 = two * s2 * (z13 - z11);
-		satellite.Xl2 = -two * s3 * z2;
-		satellite.Xl3 = -two * s3 * (z3 - z1);
-		satellite.Xl4 = -two * s3 * (-N(21) - (N(9) * emsq)) * zel;
-		satellite.Xgh2 = two * s4 * z32;
-		satellite.Xgh3 = two * s4 * (z33 - z31);
-		satellite.Xgh4 = -N(18) * s4 * zel;
-		satellite.Xh2 = -two * s2 * z22;
-		satellite.Xh3 = -two * s2 * (z23 - z21);
+		satellite.Ee2 = math.ToWorkingPrecision(two * s1 * s6);
+		satellite.E3 = math.ToWorkingPrecision(two * s1 * s7);
+		satellite.Xi2 = math.ToWorkingPrecision(two * s2 * z12);
+		satellite.Xi3 = math.ToWorkingPrecision(two * s2 * (z13 - z11));
+		satellite.Xl2 = math.ToWorkingPrecision(-two * s3 * z2);
+		satellite.Xl3 = math.ToWorkingPrecision(-two * s3 * (z3 - z1));
+		satellite.Xl4 = math.ToWorkingPrecision(-two * s3 * (-N(21) - (N(9) * emsq)) * zel);
+		satellite.Xgh2 = math.ToWorkingPrecision(two * s4 * z32);
+		satellite.Xgh3 = math.ToWorkingPrecision(two * s4 * (z33 - z31));
+		satellite.Xgh4 = math.ToWorkingPrecision(-N(18) * s4 * zel);
+		satellite.Xh2 = math.ToWorkingPrecision(-two * s2 * z22);
+		satellite.Xh3 = math.ToWorkingPrecision(-two * s2 * (z23 - z21));
 
 		return new DeepSpaceCommon<T>
 		{
@@ -373,9 +373,9 @@ internal static class DeepSpace<T>
 		T sgs = sghs - (cosim * shs);
 
 		// Lunar secular contributions, added to the solar ones.
-		satellite.Dedt = ses + (common.S1 * znl * common.S5);
-		satellite.Didt = sis + (common.S2 * znl * (common.Z11 + common.Z13));
-		satellite.Dmdt = sls - (znl * common.S3 * (common.Z1 + common.Z3 - N(14) - (N(6) * emsq)));
+		satellite.Dedt = math.ToWorkingPrecision(ses + (common.S1 * znl * common.S5));
+		satellite.Didt = math.ToWorkingPrecision(sis + (common.S2 * znl * (common.Z11 + common.Z13)));
+		satellite.Dmdt = math.ToWorkingPrecision(sls - (znl * common.S3 * (common.Z1 + common.Z3 - N(14) - (N(6) * emsq))));
 
 		T sghl = common.S4 * znl * (common.Z31 + common.Z33 - N(6));
 		T shll = -znl * common.S2 * (common.Z21 + common.Z23);
@@ -385,13 +385,13 @@ internal static class DeepSpace<T>
 			shll = T.Zero;
 		}
 
-		satellite.Domdt = sgs + sghl;
-		satellite.Dnodt = shs;
+		satellite.Domdt = math.ToWorkingPrecision(sgs + sghl);
+		satellite.Dnodt = math.ToWorkingPrecision(shs);
 
 		if (sinim != T.Zero)
 		{
-			satellite.Domdt -= cosim / sinim * shll;
-			satellite.Dnodt += shll / sinim;
+			satellite.Domdt = math.ToWorkingPrecision(satellite.Domdt - (cosim / sinim * shll));
+			satellite.Dnodt = math.ToWorkingPrecision(satellite.Dnodt + (shll / sinim));
 		}
 
 		if (satellite.Resonance == 0)
@@ -507,32 +507,32 @@ internal static class DeepSpace<T>
 		T scale = N(3) * nm * nm * aonv * aonv;
 
 		T term = scale * N(1.7891679e-6);
-		satellite.D2201 = term * f220 * g201;
-		satellite.D2211 = term * f221 * g211;
+		satellite.D2201 = math.ToWorkingPrecision(term * f220 * g201);
+		satellite.D2211 = math.ToWorkingPrecision(term * f221 * g211);
 
 		scale *= aonv;
 		term = scale * N(3.7393792e-7);
-		satellite.D3210 = term * f321 * g310;
-		satellite.D3222 = term * f322 * g322;
+		satellite.D3210 = math.ToWorkingPrecision(term * f321 * g310);
+		satellite.D3222 = math.ToWorkingPrecision(term * f322 * g322);
 
 		scale *= aonv;
 		term = two * scale * N(7.3636953e-9);
-		satellite.D4410 = term * f441 * g410;
-		satellite.D4422 = term * f442 * g422;
+		satellite.D4410 = math.ToWorkingPrecision(term * f441 * g410);
+		satellite.D4422 = math.ToWorkingPrecision(term * f442 * g422);
 
 		scale *= aonv;
 		term = scale * N(1.1428639e-7);
-		satellite.D5220 = term * f522 * g520;
-		satellite.D5232 = term * f523 * g532;
+		satellite.D5220 = math.ToWorkingPrecision(term * f522 * g520);
+		satellite.D5232 = math.ToWorkingPrecision(term * f523 * g532);
 
 		term = two * scale * N(2.1765803e-9);
-		satellite.D5421 = term * f542 * g521;
-		satellite.D5433 = term * f543 * g533;
+		satellite.D5421 = math.ToWorkingPrecision(term * f542 * g521);
+		satellite.D5433 = math.ToWorkingPrecision(term * f543 * g533);
 
-		satellite.Xlamo = (satellite.MeanAnomaly + satellite.RightAscension + satellite.RightAscension - theta - theta) % twoPi;
-		satellite.Xfact = satellite.MDot + satellite.Dmdt
-			+ (two * (satellite.NodeDot + satellite.Dnodt - N(EarthRotationPerMinute)))
-			- satellite.MeanMotion;
+		satellite.Xlamo = math.ToWorkingPrecision((satellite.MeanAnomaly + satellite.RightAscension + satellite.RightAscension - theta - theta) % twoPi);
+		satellite.Xfact = math.ToWorkingPrecision(satellite.MDot + satellite.Dmdt
+				+ (two * (satellite.NodeDot + satellite.Dnodt - N(EarthRotationPerMinute)))
+				- satellite.MeanMotion);
 	}
 
 	/// <summary>
@@ -567,13 +567,13 @@ internal static class DeepSpace<T>
 		f330 = N(1.875) * f330 * f330 * f330;
 
 		T del1 = N(3) * satellite.MeanMotion * satellite.MeanMotion * aonv * aonv;
-		satellite.Del2 = two * del1 * f220 * g200 * N(1.7891679e-6);
-		satellite.Del3 = N(3) * del1 * f330 * g300 * N(2.2123015e-7) * aonv;
-		satellite.Del1 = del1 * f311 * g310 * N(2.1460748e-6) * aonv;
+		satellite.Del2 = math.ToWorkingPrecision(two * del1 * f220 * g200 * N(1.7891679e-6));
+		satellite.Del3 = math.ToWorkingPrecision(N(3) * del1 * f330 * g300 * N(2.2123015e-7) * aonv);
+		satellite.Del1 = math.ToWorkingPrecision(del1 * f311 * g310 * N(2.1460748e-6) * aonv);
 
-		satellite.Xlamo = (satellite.MeanAnomaly + satellite.RightAscension + satellite.ArgumentOfPerigee - theta) % twoPi;
-		satellite.Xfact = satellite.MDot + apsidalNodalRate - N(EarthRotationPerMinute)
-			+ satellite.Dmdt + satellite.Domdt + satellite.Dnodt - satellite.MeanMotion;
+		satellite.Xlamo = math.ToWorkingPrecision((satellite.MeanAnomaly + satellite.RightAscension + satellite.ArgumentOfPerigee - theta) % twoPi);
+		satellite.Xfact = math.ToWorkingPrecision(satellite.MDot + apsidalNodalRate - N(EarthRotationPerMinute)
+				+ satellite.Dmdt + satellite.Domdt + satellite.Dnodt - satellite.MeanMotion);
 	}
 
 	/// <summary>
@@ -613,7 +613,7 @@ internal static class DeepSpace<T>
 
 		if (satellite.Resonance == 0)
 		{
-			return new DeepSpaceElements<T>(nm, em, inclm, mm, argpm, nodem);
+			return Reduced(new DeepSpaceElements<T>(nm, em, inclm, mm, argpm, nodem), math);
 		}
 
 		T stepp = N(StepMinutes);
@@ -685,8 +685,11 @@ internal static class DeepSpace<T>
 
 			if (T.Abs(t - atime) >= stepp)
 			{
-				xli = xli + (xldot * delt) + (xndt * step2);
-				xni = xni + (xndt * delt) + (xnddt * step2);
+				// The one accumulation in the model that runs for an unbounded number of steps, and
+				// so the one place where an arbitrary-precision type would otherwise grow without
+				// limit rather than by the length of an expression.
+				xli = math.ToWorkingPrecision(xli + (xldot * delt) + (xndt * step2));
+				xni = math.ToWorkingPrecision(xni + (xndt * delt) + (xnddt * step2));
 				atime += delt;
 			}
 			else
@@ -708,7 +711,7 @@ internal static class DeepSpace<T>
 		// and it is the form the published test vectors were produced with.
 		nm = satellite.MeanMotion + (nm - satellite.MeanMotion);
 
-		return new DeepSpaceElements<T>(nm, em, inclm, mm, argpm, nodem);
+		return Reduced(new DeepSpaceElements<T>(nm, em, inclm, mm, argpm, nodem), math);
 	}
 
 	/// <summary>
@@ -785,7 +788,7 @@ internal static class DeepSpace<T>
 			nodep += ph;
 			mp += pl;
 
-			return new DeepSpaceElements<T>(elements.MeanMotion, ep, inclp, mp, argpp, nodep);
+			return Reduced(new DeepSpaceElements<T>(elements.MeanMotion, ep, inclp, mp, argpp, nodep), math);
 		}
 
 		T sinop = math.Sin(nodep);
@@ -812,8 +815,26 @@ internal static class DeepSpace<T>
 		mp += pl;
 		argpp = xls - mp - (cosip * nodep);
 
-		return new DeepSpaceElements<T>(elements.MeanMotion, ep, inclp, mp, argpp, nodep);
+		return Reduced(new DeepSpaceElements<T>(elements.MeanMotion, ep, inclp, mp, argpp, nodep), math);
 	}
+
+	/// <summary>
+	/// Reduces every element of a set to the storage type's working precision.
+	/// </summary>
+	/// <param name="elements">The elements.</param>
+	/// <param name="math">The transcendental functions for <typeparamref name="T"/>.</param>
+	/// <returns>The same elements, carrying no more precision than the type is worked to.</returns>
+	/// <remarks>
+	/// These six values cross back into the propagator and are multiplied into everything after
+	/// them, so they are the boundary at which the deep-space routines hand their precision on.
+	/// </remarks>
+	private static DeepSpaceElements<T> Reduced(DeepSpaceElements<T> elements, IStorageMath<T> math) => new(
+		math.ToWorkingPrecision(elements.MeanMotion),
+		math.ToWorkingPrecision(elements.Eccentricity),
+		math.ToWorkingPrecision(elements.Inclination),
+		math.ToWorkingPrecision(elements.MeanAnomaly),
+		math.ToWorkingPrecision(elements.ArgumentOfPerigee),
+		math.ToWorkingPrecision(elements.RightAscension));
 
 	/// <summary>Converts a literal into the storage type.</summary>
 	/// <param name="value">The literal.</param>
