@@ -7,6 +7,14 @@ using System.Numerics;
 /// <summary>
 /// Why a propagation could not produce a state.
 /// </summary>
+/// <remarks>
+/// The numbers are the published model's own, not chosen here, which is why 5 is missing: it is
+/// reserved for an element set that is sub-orbital at its epoch, a condition this implementation
+/// does not test for separately. They are reported one at a time and never combined.
+/// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+	"Design", "CA1027:Mark enums with FlagsAttribute",
+	Justification = "The values are the published model's error numbers, and 1, 2 and 4 being powers of two is a coincidence of that numbering. They are not a bit field and combining them would be meaningless.")]
 public enum Sgp4Error
 {
 	/// <summary>The propagation succeeded.</summary>
@@ -26,15 +34,6 @@ public enum Sgp4Error
 
 	/// <summary>The satellite has decayed: the orbit radius fell below the Earth's.</summary>
 	Decayed = 6,
-
-	/// <summary>
-	/// The element set is deep-space and the deep-space model is not implemented yet.
-	/// </summary>
-	/// <remarks>
-	/// Not one of the model's own error codes. An orbital period of 225 minutes or more selects
-	/// SDP4, whose lunar-solar and resonance terms are a separate body of work.
-	/// </remarks>
-	DeepSpaceNotImplemented = 100,
 }
 
 /// <summary>

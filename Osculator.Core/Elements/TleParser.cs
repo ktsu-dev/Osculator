@@ -4,6 +4,7 @@ namespace ktsu.Osculator.Core.Elements;
 
 using System;
 using System.Globalization;
+using ktsu.Osculator.Core.Time;
 
 /// <summary>
 /// Reads element sets from the fixed-column two-line element format.
@@ -57,6 +58,7 @@ public static class TleParser
 			ObjectId = line1.Substring(9, 8).Trim(),
 			NoradCatalogId = Integer(line1, 2, 5),
 			Epoch = EpochOf(fullYear, epochDays),
+			EpochJulianDate = JulianDate.FromDayOfYear(fullYear, epochDays),
 			MeanMotionDot = Decimal(line1, 33, 10),
 			MeanMotionDdot = AssumedDecimal(line1, 44, 8),
 			BStar = AssumedDecimal(line1, 53, 8),

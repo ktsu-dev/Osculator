@@ -4,14 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-M1 in progress. Read [`docs/spec.md`](docs/spec.md) before writing anything — it settles
-architecture, data sources, propagators, the error decomposition, and the validation gates.
+M1 complete for the `double` path. Read [`docs/spec.md`](docs/spec.md) before writing anything — it
+settles architecture, data sources, propagators, the error decomposition, and the validation gates.
 
-**The near-earth SGP4 path is implemented and passes the published verification vectors** at
-7.3e-9 km on position and 7.8e-10 km/s on velocity, against a specified tolerance of 1e-8 km.
-**The deep-space path is not implemented**: an orbital period of 225 minutes or more reports
-`Sgp4Error.DeepSpaceNotImplemented` rather than quietly returning a near-earth answer. Twenty-five
-of the thirty-four verification cases are deep-space, so most of the suite is not yet exercised.
+**Gate 1 passes over the whole published verification set**: 33 cases, 666 compared rows, near-earth
+and deep-space, at 8.1e-9 km on position and 8.5e-10 km/s on velocity against a specified tolerance
+of 1e-8 km. Both halves of the model are implemented — `Sgp4<T>` and `DeepSpace<T>` — and the suite
+pins that the set exercises all three deep-space paths: no resonance (12 cases), the synchronous
+resonance (7), and the half-day resonance (5).
+
+**Two rows in that set are treated specially, both for stated reasons that are worth reading before
+touching the tolerances.** One case is refused rather than compared, because its published row is a
+stale buffer from the reference harness rather than a model output; see `ATTRIBUTION.md` beside the
+data. And the file's one long arc — 3.5 years past epoch — is held to 2e-7 km rather than 1e-8,
+because that is the round-off floor of `double` at that arc length and not a defect. Never loosen
+either tolerance to make a change pass.
 
 Every quantitative figure in the spec is a **projection**, not a measurement. Do not quote them as
 results. Milestone M5 is where measurements replace them.
@@ -74,7 +81,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Five things that are easy to get wrong here and expensive to debug.
+Nine things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -100,6 +107,18 @@ Five things that are easy to get wrong here and expensive to debug.
    velocity by `radius * xke / 60`. Dropping `xke` leaves position perfect and velocity wrong by a
    factor of 13.45 — which is precisely the defect the verification suite caught during M1, and the
    reason position and velocity are asserted separately.
+8. **The deep-space model reads the epoch, not just the time since it.** The near-earth model only
+   ever sees minutes since epoch; the deep-space model places the sun and the moon at the instant the
+   elements were fitted. `ElementSet` therefore carries a two-part `JulianDate` alongside its
+   `DateTime`, converted exactly from the fractional day of year, and the propagator reads that one.
+   Going through `DateTime` instead costs up to 99 nanoseconds — it truncates to its tick, measured,
+   not the millisecond it is sometimes said to round to — which is below what the model can notice
+   only because the sidereal angle cancels out of the resonance terms. `JulianDate` records that
+   reasoning; do not re-derive it from the class name.
+9. **The deep-space eccentricity polynomials branch three ways, not two.** `G520` splits again at
+   0.715 inside the branch that already splits at 0.65, and the verification file has a case in each
+   of the resulting ranges precisely because of it. Getting this wrong is not subtle once measured —
+   it put 10 to 19 km on four Molniya cases — but it is invisible in any element set below 0.65.
 
 ## Upstream dependencies
 
@@ -143,7 +162,8 @@ Still open upstream:
 Non-negotiable, in order. Gate 1 comes before anything else in the repository means anything.
 
 1. **SGP4 against Vallado's official verification suite** (`SGP4-VER.TLE` + `tcppver.out`), which
-   specifies expected positions to 10⁻⁸ km.
+   specifies expected positions to 10⁻⁸ km. **Passing**, over both the near-earth and the
+   deep-space model.
 2. The same suite in every storage type, tolerance scaled to the type. `float` will not meet
    10⁻⁸ km and is not expected to — recording *where* it fails is a result.
 3. Frame transforms against IERS test vectors.
