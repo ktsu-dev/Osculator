@@ -6,12 +6,13 @@ using System;
 using System.Collections.Generic;
 
 using ktsu.Osculator.Core.Propagation;
+using ktsu.Osculator.Core.Storage;
 using ktsu.Osculator.Math.Precise;
 using ktsu.PreciseNumber;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
-/// Runs the whole verification set in three storage types and measures what changes.
+/// Runs the whole verification set in every storage type and measures what changes.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,9 +22,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// when they move rather than left as decoration.
 /// </para>
 /// <para>
-/// <see langword="decimal"/> is missing, and not by oversight: it has no transcendental functions at
-/// all, so an <see cref="IStorageMath{T}"/> over it has to be written rather than delegated. It
-/// belongs here when it exists.
+/// All four storage types run here. <see langword="decimal"/> is the one whose transcendental
+/// functions this repository had to write, so the error it shows is partly its own arithmetic and
+/// partly ours — which is stated rather than hidden, because it is the interesting half.
 /// </para>
 /// </remarks>
 [TestClass]
@@ -48,6 +49,9 @@ public sealed class StorageComparisonTests
 	/// <param name="WorstPrecise">Worst reference position error against the published vectors, in km, over the published arcs.</param>
 	/// <param name="WorstDoubleVsPrecise">Worst distance between the double and reference states, in km, over the published arcs.</param>
 	/// <param name="MedianDoubleVsPrecise">Median of that distance over every row, in km.</param>
+	/// <param name="WorstDecimal">Worst decimal position error against the published vectors, in km, over the published arcs.</param>
+	/// <param name="WorstDecimalVsPrecise">Worst distance between the decimal and reference states, in km, over the published arcs.</param>
+	/// <param name="MedianDecimalVsPrecise">Median of that distance over every row, in km.</param>
 	private sealed record Measurement(
 		int Rows,
 		int FloatRefusals,
@@ -56,7 +60,10 @@ public sealed class StorageComparisonTests
 		double WorstDouble,
 		double WorstPrecise,
 		double WorstDoubleVsPrecise,
-		double MedianDoubleVsPrecise);
+		double MedianDoubleVsPrecise,
+		double WorstDecimal,
+		double WorstDecimalVsPrecise,
+		double MedianDecimalVsPrecise);
 
 	/// <summary>The measurement, computed once for the whole class.</summary>
 	/// <remarks>
@@ -110,6 +117,61 @@ public sealed class StorageComparisonTests
 	}
 
 	[TestMethod]
+	public void TwelveExtraDigitsBuyAFactorOfThree_AndCostAFactorOfFive()
+	{
+		Measurement m = Measured.Value;
+
+		Console.WriteLine($"decimal vs the {ReferenceDigits}-digit reference: median {m.MedianDecimalVsPrecise:E3} km, worst {m.WorstDecimalVsPrecise:E3} km");
+		Console.WriteLine($"double  vs the {ReferenceDigits}-digit reference: median {m.MedianDoubleVsPrecise:E3} km, worst {m.WorstDoubleVsPrecise:E3} km");
+
+		// decimal carries twenty-eight significant digits against double's sixteen. If the arithmetic
+		// error scaled with the digit count, it would be better by twelve orders of magnitude.
+		//
+		// Measured: better by a factor of 2.8 at the median (5.9e-11 km against 1.6e-10) and worse by
+		// a factor of 5.6 at the extreme (4.0e-7 km against 7.0e-8). Twelve digits bought under half
+		// an order of magnitude, and lost most of one.
+		//
+		// TheExtraDigitsAreNotWhereTheyAreNeeded, below, is why.
+		Assert.IsLessThan(m.MedianDoubleVsPrecise, m.MedianDecimalVsPrecise, "decimal is expected to be typically closer to the reference than double.");
+		Assert.IsGreaterThan(m.WorstDoubleVsPrecise, m.WorstDecimalVsPrecise, "decimal is expected to be further from the reference than double at its worst.");
+
+		// The claim that matters, in a form noise cannot flip: the gain is nothing like the twelve
+		// orders of magnitude the digit counts would predict, or even three.
+		Assert.IsGreaterThan(m.MedianDoubleVsPrecise / 1000.0, m.MedianDecimalVsPrecise);
+	}
+
+	[TestMethod]
+	public void TheExtraDigitsAreNotWhereTheyAreNeeded()
+	{
+		// decimal's precision is *absolute* and double's is *relative*, and that single difference
+		// explains the row above. decimal is a 96-bit integer with a scale capped at 28 decimal
+		// places, so the smaller a value is, the fewer significant digits it has room for; double
+		// carries the same sixteen everywhere until it reaches its subnormals.
+		//
+		// Measured with StorageProbe, which finds the smallest increment each type can still tell
+		// apart, in that type's own arithmetic:
+		//
+		//     magnitude    decimal    double
+		//     1e4             28.3      16.0
+		//     1e0             28.0      15.7
+		//     1e-4            24.0      16.0
+		//     1e-9            19.0      16.0
+		//     1e-12           16.0      16.0   <- they cross here
+		//     1e-16           12.0      16.0
+		//     1e-20            8.0      16.0
+		//
+		// SGP4's drag expansion is exactly where that hurts. Cc1 runs around 1e-12 for a typical
+		// object and D2, D3, D4, T4cof and T5cof are powers of it, so the coefficients that decide
+		// how an orbit decays sit at and below the crossover — the one place decimal has fewer
+		// digits than the type it is supposed to be improving on.
+		Assert.IsGreaterThan(SignificantDigits(1.0), SignificantDigits(1m), "At unit magnitude decimal should carry far more digits than double.");
+		Assert.IsLessThan(SignificantDigits(1e-20), SignificantDigits(1e-20m), "At 1e-20 decimal should carry far fewer digits than double.");
+
+		// And they meet in the middle, at the magnitude the drag coefficients live at.
+		Assert.AreEqual(SignificantDigits(1e-12), SignificantDigits(1e-12m), 0.5, "The crossover is expected at 1e-12.");
+	}
+
+	[TestMethod]
 	public void MorePrecisionDoesNotBringTheAnswerCloserToAReferenceComputedInDouble()
 	{
 		Measurement m = Measured.Value;
@@ -141,7 +203,10 @@ public sealed class StorageComparisonTests
 		double worstDouble = 0.0;
 		double worstPrecise = 0.0;
 		double worstDoubleVsPrecise = 0.0;
+		double worstDecimal = 0.0;
+		double worstDecimalVsPrecise = 0.0;
 		List<double> differences = [];
+		List<double> decimalDifferences = [];
 		int worstFloatCatalogId = 0;
 		int floatRefusals = 0;
 		int rows = 0;
@@ -150,6 +215,7 @@ public sealed class StorageComparisonTests
 		{
 			Sgp4Satellite<double> inDouble = Sgp4<double>.Initialize(cases[i].Elements, DoubleStorageMath.Instance);
 			Sgp4Satellite<float> inFloat = Sgp4<float>.Initialize(cases[i].Elements, FloatStorageMath.Instance);
+			Sgp4Satellite<decimal> inDecimal = Sgp4<decimal>.Initialize(cases[i].Elements, DecimalStorageMath.Instance);
 			Sgp4Satellite<PreciseNumber> inPrecise = Sgp4<PreciseNumber>.Initialize(cases[i].Elements, precise);
 
 			foreach (VerificationSet.Expected expected in blocks[i])
@@ -163,6 +229,7 @@ public sealed class StorageComparisonTests
 				}
 
 				Sgp4Result<float> fromFloat = Sgp4<float>.Propagate(inFloat, (float)expected.Minutes, FloatStorageMath.Instance);
+				Sgp4Result<decimal> fromDecimal = Sgp4<decimal>.Propagate(inDecimal, (decimal)expected.Minutes, DecimalStorageMath.Instance);
 				Sgp4Result<PreciseNumber> fromPrecise = Sgp4<PreciseNumber>.Propagate(inPrecise, expected.Minutes.ToPreciseNumber(), precise);
 
 				rows++;
@@ -173,6 +240,12 @@ public sealed class StorageComparisonTests
 				double difference = Distance(fromDouble.State.X - px, fromDouble.State.Y - py, fromDouble.State.Z - pz);
 				differences.Add(difference);
 
+				double mx = (double)fromDecimal.State.X;
+				double my = (double)fromDecimal.State.Y;
+				double mz = (double)fromDecimal.State.Z;
+				double decimalDifference = Distance(mx - px, my - py, mz - pz);
+				decimalDifferences.Add(decimalDifference);
+
 				// The long arc is held apart because it is the one place the round-off floor is
 				// visible at all, and mixing it in would hide what the published arcs measure.
 				if (System.Math.Abs(expected.Minutes) <= LongArcMinutes)
@@ -180,6 +253,8 @@ public sealed class StorageComparisonTests
 					worstDouble = System.Math.Max(worstDouble, Distance(fromDouble.State.X - expected.X, fromDouble.State.Y - expected.Y, fromDouble.State.Z - expected.Z));
 					worstPrecise = System.Math.Max(worstPrecise, Distance(px - expected.X, py - expected.Y, pz - expected.Z));
 					worstDoubleVsPrecise = System.Math.Max(worstDoubleVsPrecise, difference);
+					worstDecimal = System.Math.Max(worstDecimal, Distance(mx - expected.X, my - expected.Y, mz - expected.Z));
+					worstDecimalVsPrecise = System.Math.Max(worstDecimalVsPrecise, decimalDifference);
 				}
 
 				if (!fromFloat.IsSuccess && fromFloat.Error != Sgp4Error.Decayed)
@@ -199,6 +274,7 @@ public sealed class StorageComparisonTests
 		}
 
 		differences.Sort();
+		decimalDifferences.Sort();
 
 		return new Measurement(
 			rows,
@@ -208,8 +284,19 @@ public sealed class StorageComparisonTests
 			worstDouble,
 			worstPrecise,
 			worstDoubleVsPrecise,
-			differences[differences.Count / 2]);
+			differences[differences.Count / 2],
+			worstDecimal,
+			worstDecimalVsPrecise,
+			decimalDifferences[decimalDifferences.Count / 2]);
 	}
 
 	private static double Distance(double x, double y, double z) => System.Math.Sqrt((x * x) + (y * y) + (z * z));
+
+	/// <summary>How many significant decimal digits a type has room for at a given magnitude.</summary>
+	/// <typeparam name="T">The storage type.</typeparam>
+	/// <param name="magnitude">The magnitude to probe at.</param>
+	/// <returns>The base-ten logarithm of the magnitude over the smallest step that still changes it.</returns>
+	private static double SignificantDigits<T>(T magnitude)
+		where T : struct, System.Numerics.INumber<T> =>
+		System.Math.Log10(double.CreateTruncating(magnitude / StorageProbe.SmallestDistinguishableStep(magnitude)));
 }

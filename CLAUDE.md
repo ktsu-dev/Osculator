@@ -24,13 +24,14 @@ either tolerance to make a change pass.
 whole verification set in `float`, `double` and `PreciseNumber` at 30 significant digits, in about
 five seconds, and reports:
 
-| | worst vs the published vectors | vs the 30-digit reference |
-|---|---|---|
-| `float` | **55.06 km**, and **0 refusals in 666 rows** | — |
-| `double` | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **1.6e-10 km**, worst 7.0e-8 km |
-| `PreciseNumber` (30 digits) | **7.3e-8 km** | — |
+| | digits | worst vs the published vectors | vs the 30-digit reference |
+|---|---|---|---|
+| `float` | 7 | **55.06 km**, and **0 refusals in 666 rows** | — |
+| `double` | 16 | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **1.6e-10 km**, worst 7.0e-8 km |
+| `decimal` | 28 | 4.2e-7 km | median **5.9e-11 km**, worst 4.0e-7 km |
+| `PreciseNumber` | 30 | **7.3e-8 km** | — |
 
-Three things to take from that table, all of which the tests assert:
+Four things to take from that table, all of which the tests assert:
 
 1. **`double`'s arithmetic error is around ten orders of magnitude below the data term.** A median
    of 1.6e-10 km is a sixth of a millimetre, against 0.3 to 3 km of element-set quantization. This
@@ -42,6 +43,9 @@ Three things to take from that table, all of which the tests assert:
    defect — the precise run is the more correct one. The published vectors were computed in
    `double`, so agreeing with them closely is a property of making the same rounding errors. If
    precision were the limiting factor, a 30-digit run would agree to 1e-30 km.
+4. **`decimal`'s twelve extra digits buy a factor of 2.8, and cost a factor of 5.6.** Better than
+   `double` at the median, worse at the extreme, and nowhere near the twelve orders of magnitude the
+   digit counts suggest. See domain trap 11 for why.
 
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
@@ -81,6 +85,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 | `Osculator.Core` | `Time/`, `Elements/`, `Propagation/`, `Frames/`, `Forces/`, `Residuals/` — all generic over `TStorage` |
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
 | `Osculator.Math.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
+| `Osculator.Core/Numerics` | `DecimalMath`: sqrt, sin, cos, atan2, exp, log and pow for `decimal`, which the base library has none of |
 | `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
@@ -103,7 +108,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Ten things that are easy to get wrong here and expensive to debug.
+Eleven things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -145,7 +150,14 @@ Ten things that are easy to get wrong here and expensive to debug.
    minutes. After it: 47 ms and 30 digits. Division was never the problem — a quotient is truncated
    on the way out. Anything added to the propagator that stores or accumulates a value needs to go
    through `ToWorkingPrecision`, and the fixed-width types get the identity.
-10. **The deep-space eccentricity polynomials branch three ways, not two.** `G520` splits again at
+10. **`decimal`'s precision is absolute, not relative, and SGP4 lives below the crossover.** It is a
+   96-bit integer with a scale capped at 28 decimal places, so significant digits run out as values
+   get smaller: 28 at unit magnitude, 19 at 1e-9, **16 at 1e-12 — the same as `double`** — and 8 at
+   1e-20. SGP4's drag expansion is exactly there: `Cc1` is around 1e-12 for a typical object and
+   `D2`, `D3`, `D4`, `T4cof` and `T5cof` are powers of it. So the coefficients deciding how an orbit
+   decays are computed in *fewer* digits than `double` would give them. Measured in
+   `StorageComparisonTests`; do not assume a type with more digits has more digits everywhere.
+11. **The deep-space eccentricity polynomials branch three ways, not two.** `G520` splits again at
    0.715 inside the branch that already splits at 0.65, and the verification file has a case in each
    of the resulting ranges precisely because of it. Getting this wrong is not subtle once measured —
    it put 10 to 19 km on four Molniya cases — but it is invisible in any element set below 0.65.
@@ -194,11 +206,9 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 1. **SGP4 against Vallado's official verification suite** (`SGP4-VER.TLE` + `tcppver.out`), which
    specifies expected positions to 10⁻⁸ km. **Passing**, over both the near-earth and the
    deep-space model.
-2. The same suite in every storage type, tolerance scaled to the type. **Passing** for `float`,
-   `double` and `PreciseNumber`; `decimal` is not wired up yet, because it has no transcendental
-   functions and needs an `IStorageMath<decimal>` written rather than delegated. `float` was never
-   expected to meet 10⁻⁸ km — recording where it fails, and that it does so without saying so, is
-   the result.
+2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
+   `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
+   without saying so, is the result.
 3. Frame transforms against IERS test vectors.
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
