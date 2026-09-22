@@ -3,6 +3,7 @@
 namespace ktsu.Osculator.Core.Elements;
 
 using System;
+using ktsu.Osculator.Core.Time;
 
 /// <summary>
 /// A general perturbations element set, as distributed in OMM or two-line element format.
@@ -32,7 +33,20 @@ public sealed record ElementSet
 	public required int NoradCatalogId { get; init; }
 
 	/// <summary>Gets the epoch the elements are valid at, in UTC.</summary>
+	/// <remarks>
+	/// For display and for arithmetic on whole seconds. Anything the propagator consumes should read
+	/// <see cref="EpochJulianDate"/> instead, which is exact.
+	/// </remarks>
 	public required DateTime Epoch { get; init; }
+
+	/// <summary>Gets the same epoch as a two-part Julian date.</summary>
+	/// <remarks>
+	/// The deep-space model is a function of the epoch itself — the solar and lunar geometry at the
+	/// instant the elements were fitted — rather than only of the time elapsed since it, which is
+	/// all the near-earth model ever sees. It is carried separately because it is carried exactly;
+	/// <see cref="JulianDate"/> says what that is worth and what it is not.
+	/// </remarks>
+	public required JulianDate EpochJulianDate { get; init; }
 
 	/// <summary>Gets the mean motion, in revolutions per day.</summary>
 	public required double MeanMotion { get; init; }

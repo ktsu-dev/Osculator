@@ -78,4 +78,74 @@ public sealed class Sgp4Satellite<T>
 	internal T Xlcof { get; set; }
 	internal T Xmcof { get; set; }
 	internal T Nodecf { get; set; }
+
+	// Deep-space secular rates, from the lunar-solar terms.
+	internal T Dedt { get; set; }
+	internal T Didt { get; set; }
+	internal T Dmdt { get; set; }
+	internal T Domdt { get; set; }
+	internal T Dnodt { get; set; }
+
+	// Deep-space solar periodic coefficients.
+	internal T Se2 { get; set; }
+	internal T Se3 { get; set; }
+	internal T Si2 { get; set; }
+	internal T Si3 { get; set; }
+	internal T Sl2 { get; set; }
+	internal T Sl3 { get; set; }
+	internal T Sl4 { get; set; }
+	internal T Sgh2 { get; set; }
+	internal T Sgh3 { get; set; }
+	internal T Sgh4 { get; set; }
+	internal T Sh2 { get; set; }
+	internal T Sh3 { get; set; }
+
+	// Deep-space lunar periodic coefficients.
+	internal T Ee2 { get; set; }
+	internal T E3 { get; set; }
+	internal T Xi2 { get; set; }
+	internal T Xi3 { get; set; }
+	internal T Xl2 { get; set; }
+	internal T Xl3 { get; set; }
+	internal T Xl4 { get; set; }
+	internal T Xgh2 { get; set; }
+	internal T Xgh3 { get; set; }
+	internal T Xgh4 { get; set; }
+	internal T Xh2 { get; set; }
+	internal T Xh3 { get; set; }
+
+	// Mean longitudes of the moon and the sun at epoch, which drive those periodics.
+	internal T Zmol { get; set; }
+	internal T Zmos { get; set; }
+
+	// Greenwich sidereal time at epoch, which the resonance terms measure longitude against.
+	internal T Gsto { get; set; }
+
+	/// <summary>
+	/// Gets which Earth resonance, if any, this orbit is close enough to for the geopotential
+	/// tesseral terms to matter: 0 for none, 1 for the one-revolution-per-day synchronous case,
+	/// 2 for the half-day case.
+	/// </summary>
+	internal int Resonance { get; set; }
+
+	// Half-day resonance coefficients, used when Resonance is 2.
+	internal T D2201 { get; set; }
+	internal T D2211 { get; set; }
+	internal T D3210 { get; set; }
+	internal T D3222 { get; set; }
+	internal T D4410 { get; set; }
+	internal T D4422 { get; set; }
+	internal T D5220 { get; set; }
+	internal T D5232 { get; set; }
+	internal T D5421 { get; set; }
+	internal T D5433 { get; set; }
+
+	// Synchronous resonance coefficients, used when Resonance is 1.
+	internal T Del1 { get; set; }
+	internal T Del2 { get; set; }
+	internal T Del3 { get; set; }
+
+	// The resonance integrator's starting longitude and its secular rate.
+	internal T Xlamo { get; set; }
+	internal T Xfact { get; set; }
 }

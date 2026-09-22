@@ -5,6 +5,7 @@ namespace ktsu.Osculator.Core.Propagation;
 using System;
 using System.Numerics;
 using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Time;
 
 /// <summary>
 /// The SGP4 analytical propagator, generic over the numeric storage type.
@@ -25,10 +26,9 @@ using ktsu.Osculator.Core.Elements;
 /// from a reference implementation; see the attribution note beside the data.
 /// </para>
 /// <para>
-/// <strong>Only the near-earth model is implemented.</strong> An orbital period of 225 minutes or
-/// more selects the deep-space model, whose lunar-solar and resonance terms are a separate body of
-/// work; those element sets initialize but report
-/// <see cref="Sgp4Error.DeepSpaceNotImplemented"/> rather than returning a wrong answer quietly.
+/// An orbital period of 225 minutes or more selects the deep-space model, whose lunar-solar and
+/// resonance terms live in <see cref="DeepSpace{T}"/>. Both halves are exercised by the published
+/// verification set.
 /// </para>
 /// </remarks>
 public static class Sgp4<T>
@@ -101,7 +101,8 @@ public static class Sgp4<T>
 
 		sat.SemiMajorAxis = math.Pow(sat.MeanMotion / xke, -x2o3);
 
-		// An orbital period at or beyond the deep-space boundary selects a model this does not have.
+		// An orbital period at or beyond the deep-space boundary selects the lunar-solar and
+		// resonance terms in DeepSpace<T> in place of part of what follows.
 		T periodMinutes = twoPi / sat.MeanMotion;
 		sat.IsDeepSpace = periodMinutes >= N(DeepSpacePeriodMinutes);
 
@@ -200,6 +201,19 @@ public static class Sgp4<T>
 		sat.Sinmao = math.Sin(sat.MeanAnomaly);
 		sat.X7thm1 = (N(7) * cosio2) - T.One;
 
+		if (sat.IsDeepSpace)
+		{
+			// The deep-space model supplies its own secular terms, and the near-earth drag expansion
+			// is not among them — so the simplified path is forced on whatever the perigee height is.
+			sat.IsSimplified = true;
+
+			double epochDays = elements.EpochJulianDate.DaysSinceSgp4DayZero;
+			sat.Gsto = DeepSpace<T>.GreenwichSiderealTime(N(epochDays + JulianDate.Sgp4DayZero), math);
+
+			DeepSpaceCommon<T> common = DeepSpace<T>.InitializeCommon(sat, N(epochDays), math);
+			DeepSpace<T>.InitializeResonance(sat, common, sat.ArgpDot + sat.NodeDot, math);
+		}
+
 		if (!sat.IsSimplified)
 		{
 			T cc1sq = sat.Cc1 * sat.Cc1;
@@ -235,11 +249,6 @@ public static class Sgp4<T>
 		if (satellite.InitializationError != Sgp4Error.None)
 		{
 			return new(satellite.InitializationError, default);
-		}
-
-		if (satellite.IsDeepSpace)
-		{
-			return new(Sgp4Error.DeepSpaceNotImplemented, default);
 		}
 
 		T two = N(2);
@@ -280,6 +289,22 @@ public static class Sgp4<T>
 		T em = satellite.Eccentricity;
 		T inclm = satellite.Inclination;
 
+		if (satellite.IsDeepSpace)
+		{
+			DeepSpaceElements<T> resonant = DeepSpace<T>.ApplyResonance(
+				satellite,
+				new DeepSpaceElements<T>(nm, em, inclm, mm, argpm, nodem),
+				t,
+				math);
+
+			nm = resonant.MeanMotion;
+			em = resonant.Eccentricity;
+			inclm = resonant.Inclination;
+			mm = resonant.MeanAnomaly;
+			argpm = resonant.ArgumentOfPerigee;
+			nodem = resonant.RightAscension;
+		}
+
 		if (nm <= T.Zero)
 		{
 			return new(Sgp4Error.MeanMotionNotPositive, default);
@@ -310,7 +335,10 @@ public static class Sgp4<T>
 		T sinim = math.Sin(inclm);
 		T cosim = math.Cos(inclm);
 
-		// Long-period periodics.
+		// Lunar-solar periodics, then long-period periodics. The five coefficients below are held in
+		// locals rather than read from the satellite because the deep-space path perturbs the
+		// inclination they were derived from, and a satellite propagated to two epochs must give the
+		// same answer at each whichever order the two calls are made in.
 		T ep = em;
 		T xincp = inclm;
 		T argpp = argpm;
@@ -318,11 +346,60 @@ public static class Sgp4<T>
 		T mp = mm;
 		T sinip = sinim;
 		T cosip = cosim;
+		T aycof = satellite.Aycof;
+		T xlcof = satellite.Xlcof;
+		T con41 = satellite.Con41;
+		T x1mth2 = satellite.X1mth2;
+		T x7thm1 = satellite.X7thm1;
+
+		if (satellite.IsDeepSpace)
+		{
+			DeepSpaceElements<T> perturbed = DeepSpace<T>.ApplyPeriodics(
+				satellite,
+				new DeepSpaceElements<T>(nm, ep, xincp, mp, argpp, nodep),
+				t,
+				math);
+
+			ep = perturbed.Eccentricity;
+			xincp = perturbed.Inclination;
+			argpp = perturbed.ArgumentOfPerigee;
+			nodep = perturbed.RightAscension;
+			mp = perturbed.MeanAnomaly;
+
+			// A near-equatorial orbit can be carried through the equator by the periodics, which the
+			// model expresses as a negative inclination. Reflecting it back and turning the node and
+			// the argument of perigee half a revolution is the same orbit stated the usual way.
+			if (xincp < T.Zero)
+			{
+				xincp = -xincp;
+				nodep += math.Pi;
+				argpp -= math.Pi;
+			}
+
+			if (ep < T.Zero || ep > T.One)
+			{
+				return new(Sgp4Error.PerturbedEccentricityOutOfRange, default);
+			}
+
+			sinip = math.Sin(xincp);
+			cosip = math.Cos(xincp);
+			T oneMinusCos = T.Abs(cosip + T.One);
+			T guard = N(1.5e-12);
+
+			aycof = -N(0.5) * Wgs72<T>.J3OverJ2 * sinip;
+			xlcof = -N(0.25) * Wgs72<T>.J3OverJ2 * sinip * (N(3) + (N(5) * cosip))
+				/ (oneMinusCos > guard ? T.One + cosip : guard);
+
+			T cosisq = cosip * cosip;
+			con41 = (N(3) * cosisq) - T.One;
+			x1mth2 = T.One - cosisq;
+			x7thm1 = (N(7) * cosisq) - T.One;
+		}
 
 		T axnl = ep * math.Cos(argpp);
 		T temp0 = T.One / (am * (T.One - (ep * ep)));
-		T aynl = (ep * math.Sin(argpp)) + (temp0 * satellite.Aycof);
-		T xl = mp + argpp + nodep + (temp0 * satellite.Xlcof * axnl);
+		T aynl = (ep * math.Sin(argpp)) + (temp0 * aycof);
+		T xl = mp + argpp + nodep + (temp0 * xlcof * axnl);
 
 		// Kepler's equation, solved by Newton iteration on the eccentric longitude.
 		T u = (xl - nodep) % twoPi;
@@ -373,13 +450,13 @@ public static class Sgp4<T>
 		T temp1 = N(0.5) * j2 * temp4;
 		T temp2 = temp1 * temp4;
 
-		T mrt = (rl * (T.One - (N(1.5) * temp2 * betal * satellite.Con41)))
-			+ (N(0.5) * temp1 * satellite.X1mth2 * cos2u);
-		su -= N(0.25) * temp2 * satellite.X7thm1 * sin2u;
+		T mrt = (rl * (T.One - (N(1.5) * temp2 * betal * con41)))
+			+ (N(0.5) * temp1 * x1mth2 * cos2u);
+		su -= N(0.25) * temp2 * x7thm1 * sin2u;
 		T xnode = nodep + (N(1.5) * temp2 * cosip * sin2u);
 		T xinc = xincp + (N(1.5) * temp2 * cosip * sinip * cos2u);
-		T mvt = rdotl - (nm * temp1 * satellite.X1mth2 * sin2u / xke);
-		T rvdot = rvdotl + (nm * temp1 * ((satellite.X1mth2 * cos2u) + (N(1.5) * satellite.Con41)) / xke);
+		T mvt = rdotl - (nm * temp1 * x1mth2 * sin2u / xke);
+		T rvdot = rvdotl + (nm * temp1 * ((x1mth2 * cos2u) + (N(1.5) * con41)) / xke);
 
 		// Orientation vectors.
 		T sinsu = math.Sin(su);

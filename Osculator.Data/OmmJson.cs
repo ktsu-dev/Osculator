@@ -8,15 +8,18 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Time;
 
 /// <summary>
 /// Reads element sets from the Orbit Mean-Elements Message JSON that CelesTrak and Space-Track
 /// distribute.
 /// </summary>
 /// <remarks>
-/// The JSON form does not carry more precision than the fixed-column two-line element format it
-/// replaces — mean motion still arrives with eight decimals and eccentricity with seven. It simply
-/// stops hiding the quantization behind column positions. See <see cref="ElementFieldQuantization"/>.
+/// The JSON form carries <em>more</em> precision than the fixed-column two-line element format for
+/// some fields: it is generated from the originating values rather than by re-reading the text, so
+/// eccentricity gains a decimal and the drag term gains three significant digits. Mean motion and
+/// its first derivative are identical in both. Anything computing the data error term therefore has
+/// to know which representation it read. See <see cref="ElementFieldQuantization"/>.
 /// </remarks>
 public static class OmmJson
 {
@@ -52,28 +55,42 @@ public static class OmmJson
 		return result;
 	}
 
-	private static ElementSet ToElementSet(OmmRecord record) => new()
+	private static ElementSet ToElementSet(OmmRecord record)
 	{
-		ObjectName = record.ObjectName ?? string.Empty,
-		ObjectId = record.ObjectId ?? string.Empty,
-		NoradCatalogId = record.NoradCatalogId,
-		Epoch = DateTime.ParseExact(
-			record.Epoch ?? throw new JsonException("Element set carried no EPOCH."),
-			["yyyy-MM-ddTHH:mm:ss.ffffff", "yyyy-MM-ddTHH:mm:ss.ffffffZ", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ssZ"],
-			CultureInfo.InvariantCulture,
-			DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal),
-		MeanMotion = record.MeanMotion,
-		Eccentricity = record.Eccentricity,
-		Inclination = record.Inclination,
-		RightAscensionOfAscendingNode = record.RaOfAscNode,
-		ArgumentOfPericenter = record.ArgOfPericenter,
-		MeanAnomaly = record.MeanAnomaly,
-		BStar = record.BStar,
-		MeanMotionDot = record.MeanMotionDot,
-		MeanMotionDdot = record.MeanMotionDdot,
-		RevolutionAtEpoch = record.RevAtEpoch,
-		ElementSetNumber = record.ElementSetNo,
-	};
+		DateTime epoch = EpochOf(record);
+
+		return new()
+		{
+			ObjectName = record.ObjectName ?? string.Empty,
+			ObjectId = record.ObjectId ?? string.Empty,
+			NoradCatalogId = record.NoradCatalogId,
+			Epoch = epoch,
+			EpochJulianDate = JulianDate.FromUtc(epoch),
+			MeanMotion = record.MeanMotion,
+			Eccentricity = record.Eccentricity,
+			Inclination = record.Inclination,
+			RightAscensionOfAscendingNode = record.RaOfAscNode,
+			ArgumentOfPericenter = record.ArgOfPericenter,
+			MeanAnomaly = record.MeanAnomaly,
+			BStar = record.BStar,
+			MeanMotionDot = record.MeanMotionDot,
+			MeanMotionDdot = record.MeanMotionDdot,
+			RevolutionAtEpoch = record.RevAtEpoch,
+			ElementSetNumber = record.ElementSetNo,
+		};
+	}
+
+	/// <summary>
+	/// Reads an OMM record's epoch, which the standard writes as an ISO-8601 instant.
+	/// </summary>
+	/// <param name="record">The record.</param>
+	/// <returns>The epoch, in UTC.</returns>
+	/// <exception cref="JsonException">The record carried no <c>EPOCH</c>.</exception>
+	private static DateTime EpochOf(OmmRecord record) => DateTime.ParseExact(
+		record.Epoch ?? throw new JsonException("Element set carried no EPOCH."),
+		["yyyy-MM-ddTHH:mm:ss.ffffff", "yyyy-MM-ddTHH:mm:ss.ffffffZ", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ssZ"],
+		CultureInfo.InvariantCulture,
+		DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
 	/// <summary>
 	/// The wire shape. Internal so its members need no public documentation, and so the mapping to
