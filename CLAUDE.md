@@ -20,8 +20,30 @@ data. And the file's one long arc — 3.5 years past epoch — is held to 2e-7 k
 because that is the round-off floor of `double` at that arc length and not a defect. Never loosen
 either tolerance to make a change pass.
 
-Every quantitative figure in the spec is a **projection**, not a measurement. Do not quote them as
-results. Milestone M5 is where measurements replace them.
+**The arithmetic error term is now measured, not projected.** `StorageComparisonTests` runs the
+whole verification set in `float`, `double` and `PreciseNumber` at 30 significant digits, in about
+five seconds, and reports:
+
+| | worst vs the published vectors | vs the 30-digit reference |
+|---|---|---|
+| `float` | **55.06 km**, and **0 refusals in 666 rows** | — |
+| `double` | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **1.6e-10 km**, worst 7.0e-8 km |
+| `PreciseNumber` (30 digits) | **7.3e-8 km** | — |
+
+Three things to take from that table, all of which the tests assert:
+
+1. **`double`'s arithmetic error is around ten orders of magnitude below the data term.** A median
+   of 1.6e-10 km is a sixth of a millimetre, against 0.3 to 3 km of element-set quantization. This
+   is the repository's central claim and it now has a number.
+2. **`float` fails silently.** 55 km out and not one row reported an error: the model's error codes
+   for an eccentricity or mean motion out of range are never tripped. It returns a confident wrong
+   answer, which is the expensive failure mode.
+3. **Thirty digits agrees with the published vectors *nine times worse* than `double` does.** Not a
+   defect — the precise run is the more correct one. The published vectors were computed in
+   `double`, so agreeing with them closely is a property of making the same rounding errors. If
+   precision were the limiting factor, a 30-digit run would agree to 1e-30 km.
+
+Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
 
@@ -58,7 +80,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 |---|---|
 | `Osculator.Core` | `Time/`, `Elements/`, `Propagation/`, `Frames/`, `Forces/`, `Residuals/` — all generic over `TStorage` |
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
-| `Osculator.Math.Precise` | `PreciseMath`: sin, cos, atan2, sqrt, exp, log, π for `PreciseNumber` |
+| `Osculator.Math.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
 | `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
@@ -81,7 +103,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Nine things that are easy to get wrong here and expensive to debug.
+Ten things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -115,7 +137,15 @@ Nine things that are easy to get wrong here and expensive to debug.
    not the millisecond it is sometimes said to round to — which is below what the model can notice
    only because the sidereal angle cancels out of the resonance terms. `JulianDate` records that
    reasoning; do not re-derive it from the class name.
-9. **The deep-space eccentricity polynomials branch three ways, not two.** `G520` splits again at
+9. **An arbitrary-precision type needs the propagator to throw precision away.** `PreciseNumber`'s
+   multiplication is *exact*, so the product of two n-digit values has 2n digits of which n are
+   meaningful, and the growth is linear in the length of the chain. Measured before
+   `IStorageMath<T>.ToWorkingPrecision` existed: one `Initialize` took **18.8 seconds** and left
+   `T5cof` holding **167,104 significant digits**; a single propagation did not finish in fifteen
+   minutes. After it: 47 ms and 30 digits. Division was never the problem — a quotient is truncated
+   on the way out. Anything added to the propagator that stores or accumulates a value needs to go
+   through `ToWorkingPrecision`, and the fixed-width types get the identity.
+10. **The deep-space eccentricity polynomials branch three ways, not two.** `G520` splits again at
    0.715 inside the branch that already splits at 0.65, and the verification file has a case in each
    of the resulting ranges precisely because of it. Getting this wrong is not subtle once measured —
    it put 10 to 19 km on four Molniya cases — but it is invisible in any element set below 0.65.
@@ -144,10 +174,10 @@ Consequences for this repository, none of them yet acted on:
 - **`Osculator.Math.Precise` has lost its reason to exist.** It was a placeholder for the
   transcendentals PreciseNumber lacked. Delete it, or keep it only for anything genuinely bespoke.
 - **`StorageProbe` reimplements a Newton root** that `StorageMath` now exposes publicly.
-- **`IStorageMath<T>` is now a thin delegation for every storage type**, including `PreciseNumber`.
-  It is still the right seam — it keeps the propagator free of a
-  `ITrigonometricFunctions<T>` constraint — but the precise implementation is no longer a project's
-  worth of work.
+- **`IStorageMath<T>` is now a thin delegation for every storage type** that has transcendentals,
+  including `PreciseNumber`. It is still the right seam — it keeps the propagator free of a
+  `ITrigonometricFunctions<T>` constraint — and it now also carries `ToWorkingPrecision`, which is
+  not a delegation at all. See the domain traps.
 
 Still open upstream:
 
@@ -164,8 +194,11 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 1. **SGP4 against Vallado's official verification suite** (`SGP4-VER.TLE` + `tcppver.out`), which
    specifies expected positions to 10⁻⁸ km. **Passing**, over both the near-earth and the
    deep-space model.
-2. The same suite in every storage type, tolerance scaled to the type. `float` will not meet
-   10⁻⁸ km and is not expected to — recording *where* it fails is a result.
+2. The same suite in every storage type, tolerance scaled to the type. **Passing** for `float`,
+   `double` and `PreciseNumber`; `decimal` is not wired up yet, because it has no transcendental
+   functions and needs an `IStorageMath<decimal>` written rather than delegated. `float` was never
+   expected to meet 10⁻⁸ km — recording where it fails, and that it does so without saying so, is
+   the result.
 3. Frame transforms against IERS test vectors.
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
