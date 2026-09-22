@@ -10,4 +10,8 @@
     <PackageReference Include="ktsu.PreciseNumber" />
     <PackageReference Include="Polyfill" PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
+  </ItemGroup>
 </Project>

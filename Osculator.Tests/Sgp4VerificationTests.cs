@@ -4,9 +4,6 @@ namespace ktsu.Osculator.Tests;
 
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -21,23 +18,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 [TestClass]
 public sealed class Sgp4VerificationTests
 {
-	/// <summary>One verification case: an element set and the time span to propagate it over.</summary>
-	/// <param name="Elements">The element set.</param>
-	/// <param name="StartMinutes">Minutes since epoch to start at.</param>
-	/// <param name="StopMinutes">Minutes since epoch to stop at.</param>
-	/// <param name="StepMinutes">Step in minutes.</param>
-	private sealed record Case(ElementSet Elements, double StartMinutes, double StopMinutes, double StepMinutes);
-
-	/// <summary>One expected state from the published output.</summary>
-	/// <param name="Minutes">Minutes since epoch.</param>
-	/// <param name="X">TEME x, in kilometres.</param>
-	/// <param name="Y">TEME y, in kilometres.</param>
-	/// <param name="Z">TEME z, in kilometres.</param>
-	/// <param name="VelocityX">TEME x velocity, in kilometres per second.</param>
-	/// <param name="VelocityY">TEME y velocity, in kilometres per second.</param>
-	/// <param name="VelocityZ">TEME z velocity, in kilometres per second.</param>
-	private sealed record Expected(double Minutes, double X, double Y, double Z, double VelocityX, double VelocityY, double VelocityZ);
-
 	/// <summary>
 	/// The position tolerance, in kilometres.
 	/// </summary>
@@ -110,20 +90,11 @@ public sealed class Sgp4VerificationTests
 	/// </remarks>
 	private const double VelocityToleranceKmPerSecond = 1e-9;
 
-	/// <summary>Gets the directory the committed verification vectors are copied to.</summary>
-	/// <remarks>
-	/// <see cref="Path.Join(string, string)"/> rather than <see cref="Path.Combine(string, string)"/>
-	/// throughout this file: <c>Combine</c> discards everything before a rooted later segment, and
-	/// while every segment here is a string literal that cannot be rooted, <c>Join</c> is the right
-	/// default when the later segment is known to be relative and costs nothing.
-	/// </remarks>
-	private static string DataDirectory => Path.Join(AppContext.BaseDirectory, "Data");
-
 	[TestMethod]
 	public void EveryCase_MatchesThePublishedVectors()
 	{
-		List<Case> cases = ReadCases();
-		List<IReadOnlyList<Expected>> expectedBlocks = ReadExpected();
+		List<VerificationSet.Case> cases = VerificationSet.ReadCases();
+		List<IReadOnlyList<VerificationSet.Expected>> expectedBlocks = VerificationSet.ReadExpected();
 
 		Assert.AreEqual(cases.Count, expectedBlocks.Count, "Case count and expected-block count disagree; the two files are out of step.");
 
@@ -147,7 +118,7 @@ public sealed class Sgp4VerificationTests
 				nearEarthCases++;
 			}
 
-			foreach (Expected expected in expectedBlocks[i])
+			foreach (VerificationSet.Expected expected in expectedBlocks[i])
 			{
 				Sgp4Result<double> result = Sgp4<double>.Propagate(satellite, expected.Minutes, DoubleStorageMath.Instance);
 
@@ -199,7 +170,7 @@ public sealed class Sgp4VerificationTests
 	{
 		// The other half of the exception made above: skipping a case is only honest if what it does
 		// instead is asserted. See HarnessArtifactCatalogId for why its published row is not one.
-		Case constructed = ReadCases().Find(c => c.Elements.NoradCatalogId == HarnessArtifactCatalogId)
+		VerificationSet.Case constructed = VerificationSet.ReadCases().Find(c => c.Elements.NoradCatalogId == HarnessArtifactCatalogId)
 			?? throw new InvalidOperationException($"Object {HarnessArtifactCatalogId} is no longer in the verification file.");
 
 		Sgp4Satellite<double> satellite = Sgp4<double>.Initialize(constructed.Elements, DoubleStorageMath.Instance);
@@ -220,7 +191,7 @@ public sealed class Sgp4VerificationTests
 		// so a case going missing from the file shows up here rather than as quiet coverage loss.
 		Dictionary<int, int> byResonance = new() { [0] = 0, [1] = 0, [2] = 0 };
 
-		foreach (Case verification in ReadCases())
+		foreach (VerificationSet.Case verification in VerificationSet.ReadCases())
 		{
 			Sgp4Satellite<double> satellite = Sgp4<double>.Initialize(verification.Elements, DoubleStorageMath.Instance);
 
@@ -238,83 +209,4 @@ public sealed class Sgp4VerificationTests
 	}
 
 	private static double Distance(double x, double y, double z) => System.Math.Sqrt((x * x) + (y * y) + (z * z));
-
-	private static List<Case> ReadCases()
-	{
-		string[] lines = File.ReadAllLines(Path.Join(DataDirectory, "SGP4-VER.TLE"));
-		List<Case> cases = [];
-		string? pending = null;
-
-		foreach (string line in lines)
-		{
-			if (line.StartsWith('#'))
-			{
-				continue;
-			}
-
-			if (line.StartsWith("1 ", StringComparison.Ordinal))
-			{
-				pending = line;
-				continue;
-			}
-
-			if (!line.StartsWith("2 ", StringComparison.Ordinal) || pending is null)
-			{
-				continue;
-			}
-
-			// The verification file appends start, stop and step in minutes after the element fields.
-			string[] tail = line[69..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-			cases.Add(new Case(
-				TleParser.Parse(pending, line),
-				double.Parse(tail[0], CultureInfo.InvariantCulture),
-				double.Parse(tail[1], CultureInfo.InvariantCulture),
-				double.Parse(tail[2], CultureInfo.InvariantCulture)));
-
-			pending = null;
-		}
-
-		return cases;
-	}
-
-	private static List<IReadOnlyList<Expected>> ReadExpected()
-	{
-		string[] lines = File.ReadAllLines(Path.Join(DataDirectory, "sgp4-ver-expected.out"));
-		List<IReadOnlyList<Expected>> blocks = [];
-		List<Expected>? current = null;
-
-		foreach (string line in lines)
-		{
-			string[] fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-			if (fields.Length == 0)
-			{
-				continue;
-			}
-
-			if (fields.Length == 2 && fields[1] == "xx")
-			{
-				current = [];
-				blocks.Add(current);
-				continue;
-			}
-
-			if (current is null || fields.Length < 7)
-			{
-				continue;
-			}
-
-			current.Add(new Expected(
-				double.Parse(fields[0], CultureInfo.InvariantCulture),
-				double.Parse(fields[1], CultureInfo.InvariantCulture),
-				double.Parse(fields[2], CultureInfo.InvariantCulture),
-				double.Parse(fields[3], CultureInfo.InvariantCulture),
-				double.Parse(fields[4], CultureInfo.InvariantCulture),
-				double.Parse(fields[5], CultureInfo.InvariantCulture),
-				double.Parse(fields[6], CultureInfo.InvariantCulture)));
-		}
-
-		return blocks;
-	}
 }
