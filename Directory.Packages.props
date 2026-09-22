@@ -11,14 +11,14 @@
     <!-- The quantity vocabulary. Osculator.Core references the core package and uses the open
          generics; the four storage facades each reference exactly one alias package, because the
          aliases are global usings and only one storage type can win per project. -->
-    <PackageVersion Include="ktsu.Semantics.Quantities" Version="5.3.1" />
-    <PackageVersion Include="ktsu.Semantics.Quantities.Double" Version="5.3.1" />
-    <PackageVersion Include="ktsu.Semantics.Quantities.Float" Version="5.3.1" />
-    <PackageVersion Include="ktsu.Semantics.Quantities.Decimal" Version="5.3.1" />
-    <PackageVersion Include="ktsu.Semantics.Quantities.Precise" Version="5.3.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities" Version="5.5.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Double" Version="5.5.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Float" Version="5.5.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Decimal" Version="5.5.1" />
+    <PackageVersion Include="ktsu.Semantics.Quantities.Precise" Version="5.5.1" />
     <!-- The reference arithmetic. See PreciseNumber#78: it implements INumber<T> and nothing
          else, so Osculator.Math.Precise supplies the transcendentals SGP4 needs until that lands. -->
-    <PackageVersion Include="ktsu.PreciseNumber" Version="2.0.4" />
+    <PackageVersion Include="ktsu.PreciseNumber" Version="2.5.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- UI -->

@@ -103,20 +103,40 @@ Five things that are easy to get wrong here and expensive to debug.
 
 ## Upstream dependencies
 
-Speccing this application surfaced eleven gaps in the three libraries it consumes. Ten are filed with
-full designs; see the README for the list. The blocking one is
-**[ktsu-dev/PreciseNumber#78](https://github.com/ktsu-dev/PreciseNumber/issues/78)**: `PreciseNumber`
-implements `INumber<T>` and nothing else, so there is no `Sqrt`, `Sin`, `Cos` or `Atan2`, and SGP4
-cannot be written without them. `Osculator.Math.Precise` exists to supply them locally until that
-lands.
+Speccing this application surfaced eleven gaps in the three libraries it consumes; ten were filed
+with full designs. **Seven have since landed and are published**, which unblocked M3 — the precise
+path is no longer waiting on anything.
 
-Two related constraints worth knowing before starting M3:
+Verified against `ktsu.PreciseNumber` 2.5.0 and `ktsu.Semantics.Quantities` 5.5.1:
 
-- **[PreciseNumber#79](https://github.com/ktsu-dev/PreciseNumber/issues/79)** — `Pi` carries 26
-  significant digits against a default division precision of 50. Argument reduction cannot beat the
-  precision of π, so the precise path currently caps out around 21 usable digits.
-- **[Semantics#239](https://github.com/ktsu-dev/Semantics/issues/239)** — `StorageMath.Sqrt<T>` is
-  `internal`, so the type-generic Newton root cannot be reused and would have to be reimplemented.
+| Was blocking | Now |
+|---|---|
+| [PreciseNumber#80](https://github.com/ktsu-dev/PreciseNumber/issues/80) roots | `Sqrt`, `Cbrt`, `RootN`, `Hypot` — `IRootFunctions` implemented |
+| [PreciseNumber#81](https://github.com/ktsu-dev/PreciseNumber/issues/81) exp/log/pow | `Exp`, `Log`, `Log2`, `Log10`, `Pow` — the three interfaces implemented, no `double` fallback |
+| [PreciseNumber#82](https://github.com/ktsu-dev/PreciseNumber/issues/82) trig | `Sin`, `Cos`, `Tan`, `Asin`, `Acos`, `Atan`, `SinCos`, and a bespoke `Atan2` |
+| [PreciseNumber#79](https://github.com/ktsu-dev/PreciseNumber/issues/79) constants | π, τ and e now carry **150 significant digits, correctly rounded** (π ends `…940813`; the old truncation gave `…940812`) |
+| [Semantics#239](https://github.com/ktsu-dev/Semantics/issues/239) | `StorageMath` is **public** |
+| [Semantics#238](https://github.com/ktsu-dev/Semantics/issues/238) | `Position3D<T>` has `Magnitude()` and `DistanceTo()` returning the V0 quantity |
+| [Semantics#240](https://github.com/ktsu-dev/Semantics/issues/240) | `GravitationalParameter<T>` exists |
+| [Semantics#244](https://github.com/ktsu-dev/Semantics/issues/244) | alias-package composability — the `PrivateAssets="all"` workaround in the four facades can be revisited |
+
+Consequences for this repository, none of them yet acted on:
+
+- **`Osculator.Math.Precise` has lost its reason to exist.** It was a placeholder for the
+  transcendentals PreciseNumber lacked. Delete it, or keep it only for anything genuinely bespoke.
+- **`StorageProbe` reimplements a Newton root** that `StorageMath` now exposes publicly.
+- **`IStorageMath<T>` is now a thin delegation for every storage type**, including `PreciseNumber`.
+  It is still the right seam — it keeps the propagator free of a
+  `ITrigonometricFunctions<T>` constraint — but the precise implementation is no longer a project's
+  worth of work.
+
+Still open upstream:
+
+- **[Semantics#237](https://github.com/ktsu-dev/Semantics/issues/237)** — vector forms have no
+  `From{Unit}` factories, so a `Position3D` is still built in raw metres.
+- **[ImGuiApp#411](https://github.com/ktsu-dev/ImGuiApp/issues/411)** (virtualized table) and
+  **[#413](https://github.com/ktsu-dev/ImGuiApp/issues/413)** (backend-agnostic 3D, four sub-issues)
+  — no movement; the globe is still a CPU raster and the catalogue still needs `ImGuiListClipper`.
 
 ## Validation gates
 
