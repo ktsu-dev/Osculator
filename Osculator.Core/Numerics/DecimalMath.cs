@@ -34,6 +34,15 @@ using System;
 /// intermediate near the size of the term itself.
 /// </item>
 /// <item>
+/// <strong>Every series index is multiplied out in <see langword="decimal"/>, not in
+/// <see langword="int"/>.</strong> None of these loops can reach an index where <c>2n(2n+1)</c>
+/// would overflow a 32-bit integer — that needs n near 23,000 and the terms die by n of about
+/// twenty — but the bound is a property of the mathematics rather than of a guard in the code, and
+/// an integer denominator that wrapped would come back negative and flip a term's sign silently.
+/// Small integers convert to <see langword="decimal"/> exactly, so writing it this way costs
+/// nothing and the results are unchanged to the last digit.
+/// </item>
+/// <item>
 /// <strong>A power of two is formed once and applied once.</strong> Halving a
 /// <see langword="decimal"/> is not exact — the result may need a 29th decimal place — so scaling by
 /// 2^k in a loop of k halvings accumulates k roundings. Building 2^k by repeated doubling is exact
@@ -210,7 +219,7 @@ public static class DecimalMath
 				break;
 			}
 
-			decimal next = sum + (power / ((2 * n) + 1));
+			decimal next = sum + (power / ((2m * n) + 1m));
 
 			if (next == sum)
 			{
@@ -399,7 +408,7 @@ public static class DecimalMath
 				break;
 			}
 
-			decimal next = sum + (power / ((2 * n) + 1));
+			decimal next = sum + (power / ((2m * n) + 1m));
 
 			if (next == sum)
 			{
@@ -423,7 +432,8 @@ public static class DecimalMath
 
 		for (int n = 1; ; n++)
 		{
-			term = -term * squared / (2 * n * ((2 * n) + 1));
+			decimal twoN = 2m * n;
+			term = -term * squared / (twoN * (twoN + 1m));
 			decimal next = sum + term;
 
 			if (next == sum)
@@ -448,7 +458,8 @@ public static class DecimalMath
 
 		for (int n = 1; ; n++)
 		{
-			term = -term * squared / (((2 * n) - 1) * 2 * n);
+			decimal twoN = 2m * n;
+			term = -term * squared / ((twoN - 1m) * twoN);
 			decimal next = sum + term;
 
 			if (next == sum)
