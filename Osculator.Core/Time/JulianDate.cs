@@ -49,9 +49,13 @@ public readonly record struct JulianDate(double Day, double DayFraction)
 	/// <returns>The two-part Julian date.</returns>
 	public static JulianDate FromCalendar(int year, int month, int day, int hour, int minute, double second)
 	{
+		// Every multiplication is written with a floating-point literal so none of them is an integer
+		// multiply that could overflow before the division sees it. For a month in 1 to 12 it cannot,
+		// but the parameters are a public surface and this costs nothing: the products are small
+		// integers either way, so the result is bit-for-bit what the integer form gives.
 		double whole = (367.0 * year)
-			- System.Math.Floor(7 * (year + System.Math.Floor((month + 9) / 12.0)) * 0.25)
-			+ System.Math.Floor(275 * month / 9.0)
+			- System.Math.Floor(7.0 * (year + System.Math.Floor((month + 9.0) / 12.0)) * 0.25)
+			+ System.Math.Floor(275.0 * month / 9.0)
 			+ day
 			+ 1721013.5;
 
