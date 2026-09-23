@@ -54,6 +54,12 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
+**The residual layer is in.** `Osculator.Core/Residuals/` resolves the difference between two
+states into the reference state's RIC/RSW frame. Nothing in the dimensions catches a sign or an
+axis order — a cross product and its negation have identical dimensions — so all three conventions
+are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
+up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
@@ -115,7 +121,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Twelve things that are easy to get wrong here and expensive to debug.
+Thirteen things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -176,6 +182,16 @@ Twelve things that are easy to get wrong here and expensive to debug.
    unchecked that reaches the JSON reader as a parse failure, which says nothing about what went
    wrong. `CelesTrakClient` detects it, raises `CelesTrakException`, and does **not** cache it —
    otherwise one typo would keep failing for the whole window.
+13. **SGP4's reported velocity is not the exact time derivative of its reported position.** Measured
+   at about **1.2e-3 km/s** on the first verification case: differencing two propagated positions
+   gives a cross-track rate of 9.6e-4 km/s, and the cross-track axis is built from `r × v`, so the
+   stated velocity has no cross-track component by construction. It is linear in the offset — the
+   ratio held across 1, 0.5, 0.25 and 0.125 seconds — so it is a velocity discrepancy and not an
+   acceleration. The cause is that the periodic corrections' own time derivatives are only partly
+   carried into the model's velocity formulas. **It is around a metre per second of Δ_model, seven
+   orders of magnitude above `double`'s arithmetic error**, so a residual built by differencing
+   positions and one built from the stated velocity are different measurements. Which one is used
+   has to be a decision rather than an accident. `RswResidualTests` pins it.
 
 ## Upstream dependencies
 
