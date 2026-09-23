@@ -125,11 +125,11 @@ Osculator/
 │   ├─ Forces/                 EGM96 harmonics, third-body, drag, SRP
 │   └─ Residuals/              RIC/RSW decomposition, growth fits, exact statistics
 ├─ Osculator.Data/            CelesTrak, Space-Track, CDDIS/ILRS, JPL Horizons + disk cache
-├─ Osculator.Math.Precise/    PreciseMath: sin, cos, atan2, sqrt, exp, log, π for PreciseNumber
+├─ Osculator.Numerics.Precise/    PreciseMath: sin, cos, atan2, sqrt, exp, log, π for PreciseNumber
 ├─ Osculator.Storage.Double/  one-line facade; references ktsu.Semantics.Quantities.Double
 ├─ Osculator.Storage.Float/   …Float
 ├─ Osculator.Storage.Decimal/ …Decimal
-├─ Osculator.Storage.Precise/ …Precise  (+ ktsu.PreciseNumber, + Osculator.Math.Precise)
+├─ Osculator.Storage.Precise/ …Precise  (+ ktsu.PreciseNumber, + Osculator.Numerics.Precise)
 ├─ Osculator.App/             net10.0 — ktsu.ImGui.App, ktsu.ImGui.Widgets, Hexa.NET.ImPlot
 ├─ Osculator.Tests/           MSTest; includes the Vallado SGP4 verification suite
 └─ Osculator.Benchmarks/      BenchmarkDotNet: cost per propagation, per storage type
@@ -357,7 +357,7 @@ a candidate contribution back upstream.
 `PreciseNumber` implements `INumber<PreciseNumber>` and nothing else: no
 `ITrigonometricFunctions`, `IRootFunctions`, `ILogarithmicFunctions`, or
 `IExponentialFunctions`. SGP4 is saturated with `sin`, `cos`, `atan2`, `sqrt` and `fmod`.
-`Osculator.Math.Precise` must supply them (Taylor series with argument reduction for sin/cos,
+`Osculator.Numerics.Precise` must supply them (Taylor series with argument reduction for sin/cos,
 Newton for sqrt, `atanh` series or AGM for log). *Upstream: implement
 `IRootFunctions<PreciseNumber>` and `ITrigonometricFunctions<PreciseNumber>`.*
 

@@ -3,6 +3,7 @@
 namespace ktsu.Osculator.Core.Numerics;
 
 using System;
+using ktsu.Semantics.Quantities;
 
 /// <summary>
 /// The transcendental functions for <see langword="decimal"/>, which the base library does not have.
@@ -97,9 +98,21 @@ public static class DecimalMath
 	/// <returns>The square root.</returns>
 	/// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is negative.</exception>
 	/// <remarks>
-	/// Newton's iteration seeded from <see cref="System.Math.Sqrt(double)"/>. The seed is already
-	/// correct to about fifteen digits and each step doubles that, so two steps reach the type's
-	/// limit and the loop below almost always runs three times before the value stops moving.
+	/// <para>
+	/// The one function here that is <em>not</em> written in this file, and the exception is worth
+	/// being precise about: of the seven functions this module supplies, six had to be written
+	/// because nothing available computes them for a <see langword="decimal"/>. The square root is
+	/// the seventh, and <see cref="StorageMath.Sqrt{T}"/> in <c>ktsu.Semantics.Quantities</c> — which
+	/// this project already depends on — has it. Its answers were measured against this file's own
+	/// Newton iteration across seven magnitudes from 1e-10 to 1e20 and were identical in every bit,
+	/// so keeping a second copy bought nothing.
+	/// </para>
+	/// <para>
+	/// The negative guard stays, because it is the one thing the delegation would have lost:
+	/// <see cref="StorageMath.Sqrt{T}"/> answers a negative radicand with an
+	/// <see cref="OverflowException"/>, which is not what went wrong. A domain error should say which
+	/// argument was out of its domain.
+	/// </para>
 	/// </remarks>
 	public static decimal Sqrt(decimal value)
 	{
@@ -108,26 +121,7 @@ public static class DecimalMath
 			throw new ArgumentOutOfRangeException(nameof(value), value, "A square root is not defined for a negative value.");
 		}
 
-		if (value == 0m)
-		{
-			return 0m;
-		}
-
-		decimal root = (decimal)System.Math.Sqrt((double)value);
-
-		for (int step = 0; step < 8; step++)
-		{
-			decimal next = (root + (value / root)) / 2m;
-
-			if (next == root)
-			{
-				break;
-			}
-
-			root = next;
-		}
-
-		return root;
+		return StorageMath.Sqrt(value);
 	}
 
 	/// <summary>
