@@ -81,7 +81,7 @@ public sealed class DataTermTests
 		report.AppendLine(string.Create(CultureInfo.InvariantCulture,
 			$"\nmedian over {atOneDay.Count} usable cases: {atOneDay[atOneDay.Count / 2]:F3} km at 1 day, {atSevenDays[atSevenDays.Count / 2]:F3} km at 7 days"));
 		report.AppendLine($"dominant field: {string.Join(", ", dominant)}");
-		Console.WriteLine(report.ToString());
+		Console.WriteLine(report);
 
 		Assert.IsGreaterThan(5, atOneDay.Count, "Too few cases survived to say anything.");
 	}
