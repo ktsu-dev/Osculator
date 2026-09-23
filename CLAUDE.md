@@ -33,9 +33,12 @@ five seconds, and reports:
 
 Four things to take from that table, all of which the tests assert:
 
-1. **`double`'s arithmetic error is around ten orders of magnitude below the data term.** A median
-   of 1.6e-10 km is a sixth of a millimetre, against 0.3 to 3 km of element-set quantization. This
-   is the repository's central claim and it now has a number.
+1. **`double`'s arithmetic error is around eight and a half orders of magnitude below the data
+   term.** A median of 1.6e-10 km is a sixth of a millimetre, against a measured **0.056 km** of
+   element-set quantization. This is the repository's central claim and both sides of it are now
+   numbers. It used to read "around ten orders" against "0.3 to 3 km of element-set quantization";
+   that was a projection, the quantization has since been measured at a twentieth of it, and the
+   claim survives comfortably either way. See below.
 2. **`float` fails silently.** 55 km out and not one row reported an error: the model's error codes
    for an eccentricity or mean motion out of range are never tripped. It returns a confident wrong
    answer, which is the expensive failure mode.
@@ -46,6 +49,49 @@ Four things to take from that table, all of which the tests assert:
 4. **`decimal`'s twelve extra digits buy a factor of 2.8, and cost a factor of 5.6.** Better than
    `double` at the median, worse at the extreme, and nowhere near the twelve orders of magnitude the
    digit counts suggest. See domain trap 11 for why.
+
+**M2's data layer is in.** `Osculator.Data/CelesTrak/` holds a client, a response cache and a
+snapshot store. The cache is the part with an obligation attached rather than a preference —
+CelesTrak is free, is run by one person, and asks consumers to cache and refetch infrequently — so
+its tests count requests through a stub transport against a clock the test moves by hand, and they
+were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
+age term fails one. A cache test never seen to fail is not evidence of a cache.
+
+**Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
+every usable case in the verification set, perturbs each element field by half its written step,
+propagates, and combines the eight contributions in quadrature:
+
+| | 1 day | 3 days | 7 days |
+|---|---|---|---|
+| median over 27 cases | **0.056 km** | — | **0.066 km** |
+| range | 0.010 – 0.388 km | 0.010 – 4.49 km | 0.013 – 4.58 km |
+
+Four things to take from that, all of which the tests assert:
+
+1. **It is around 0.06 km, not the 0.3–3 km the spec projects.** The projection was out by a factor
+   of five to fifty. Note carefully what is and is not measured here: this is the band of element
+   sets that *would have been written identically*, which is pure quantization of the digits on the
+   page. It is **not** how well the orbit is actually known — that includes the fit residual and the
+   deliberate degradation of public element sets, and it cannot be measured from an element set
+   alone. Both get loosely called Δ_data; only the first one is what this number is.
+2. **Mean motion never leads, in any of the 27 cases.** Written expecting it to dominate at a week,
+   since its error is a rate and therefore integrates. It does integrate and it still loses: half a
+   step is 5e-9 rev/day, about 1.5 m of phase after seven days, while half a step of an angle is
+   already 3 m at t=0. The rate has a week to catch up and does not manage it.
+3. **The term barely grows with the arc for most cases, and explodes for a few.** The median moves
+   from 0.056 to 0.066 km over a week, while 11801 goes 0.099 → 4.49 km and 16925 goes 0.187 →
+   3.09 km. Both of those are eccentricity-led, which is where a half-step in the seventh decimal
+   moves perigee enough to change the drag the orbit sees.
+4. **`MeanMotionDot` contributes exactly zero, and so does `MeanMotionDdot`.** Not small — zero.
+   `Sgp4.cs` never reads either field; all of SGP4's drag is B*. They are in every TLE because SGP,
+   the model this one replaced, used them. The perturbation is kept in the table rather than
+   dropped, because a contribution of exactly zero is the evidence.
+
+**The residual layer is in.** `Osculator.Core/Residuals/` resolves the difference between two
+states into the reference state's RIC/RSW frame. Nothing in the dimensions catches a sign or an
+axis order — a cross product and its negation have identical dimensions — so all three conventions
+are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
+up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
@@ -108,7 +154,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Eleven things that are easy to get wrong here and expensive to debug.
+Thirteen things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -161,6 +207,24 @@ Eleven things that are easy to get wrong here and expensive to debug.
    0.715 inside the branch that already splits at 0.65, and the verification file has a case in each
    of the resulting ranges precisely because of it. Getting this wrong is not subtle once measured —
    it put 10 to 19 km on four Molniya cases — but it is invisible in any element set below 0.65.
+12. **CelesTrak's `gp.php` sends no `Last-Modified`, `ETag` or `Cache-Control`** — measured against
+   the live service, not assumed. So there is no conditional request to make and no server-stated
+   freshness to honour: the entire refetch policy is ours, which is exactly why it is tested rather
+   than documented. It also answers an unknown catalogue number with a **200 and the sentence
+   `No GP data found`**, so a successful request is not on its own a successful lookup; left
+   unchecked that reaches the JSON reader as a parse failure, which says nothing about what went
+   wrong. `CelesTrakClient` detects it, raises `CelesTrakException`, and does **not** cache it —
+   otherwise one typo would keep failing for the whole window.
+13. **SGP4's reported velocity is not the exact time derivative of its reported position.** Measured
+   at about **1.2e-3 km/s** on the first verification case: differencing two propagated positions
+   gives a cross-track rate of 9.6e-4 km/s, and the cross-track axis is built from `r × v`, so the
+   stated velocity has no cross-track component by construction. It is linear in the offset — the
+   ratio held across 1, 0.5, 0.25 and 0.125 seconds — so it is a velocity discrepancy and not an
+   acceleration. The cause is that the periodic corrections' own time derivatives are only partly
+   carried into the model's velocity formulas. **It is around a metre per second of Δ_model, seven
+   orders of magnitude above `double`'s arithmetic error**, so a residual built by differencing
+   positions and one built from the stated velocity are different measurements. Which one is used
+   has to be a decision rather than an accident. `RswResidualTests` pins it.
 
 ## Upstream dependencies
 

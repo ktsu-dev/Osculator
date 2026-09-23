@@ -38,22 +38,58 @@ public static class OmmJson
 	/// <exception cref="JsonException"><paramref name="json"/> is not valid OMM JSON.</exception>
 	public static IReadOnlyList<ElementSet> Read(string json)
 	{
-		Ensure.NotNull(json);
+		List<ElementSet> result = [];
 
-		string trimmed = json.TrimStart();
-		OmmRecord[] records = trimmed.StartsWith('[')
-			? JsonSerializer.Deserialize<OmmRecord[]>(json, Options) ?? []
-			: [JsonSerializer.Deserialize<OmmRecord>(json, Options) ?? throw new JsonException("Document contained no element set.")];
-
-		List<ElementSet> result = new(records.Length);
-
-		foreach (OmmRecord record in records)
+		foreach ((ElementSet elements, string _) in ReadWithSource(json))
 		{
-			result.Add(ToElementSet(record));
+			result.Add(elements);
 		}
 
 		return result;
 	}
+
+	/// <summary>
+	/// Reads every element set in an OMM JSON document, each paired with the text it came from.
+	/// </summary>
+	/// <param name="json">The document text, which may be a single object or an array of them.</param>
+	/// <returns>The element sets and their source records, in document order.</returns>
+	/// <exception cref="ArgumentNullException"><paramref name="json"/> is null.</exception>
+	/// <exception cref="JsonException"><paramref name="json"/> is not valid OMM JSON.</exception>
+	/// <remarks>
+	/// The source text is what <see cref="ktsu.Osculator.Data.CelesTrak.SnapshotStore"/> archives.
+	/// Keeping it means the archive holds what the service served rather than this file's reading of
+	/// it, so a parser that later turns out to have been wrong can be re-run over the same bytes.
+	/// </remarks>
+	public static IReadOnlyList<(ElementSet Elements, string Source)> ReadWithSource(string json)
+	{
+		Ensure.NotNull(json);
+
+		using JsonDocument document = JsonDocument.Parse(json);
+		JsonElement root = document.RootElement;
+
+		List<(ElementSet, string)> result = [];
+
+		if (root.ValueKind == JsonValueKind.Array)
+		{
+			foreach (JsonElement element in root.EnumerateArray())
+			{
+				result.Add((ToElementSet(Deserialize(element)), element.GetRawText()));
+			}
+
+			return result;
+		}
+
+		result.Add((ToElementSet(Deserialize(root)), root.GetRawText()));
+
+		return result;
+	}
+
+	/// <summary>Turns one JSON object into the wire shape.</summary>
+	/// <param name="element">The object.</param>
+	/// <returns>The record.</returns>
+	/// <exception cref="JsonException">The element was not an element set.</exception>
+	private static OmmRecord Deserialize(JsonElement element) =>
+		element.Deserialize<OmmRecord>(Options) ?? throw new JsonException("Document contained no element set.");
 
 	private static ElementSet ToElementSet(OmmRecord record)
 	{
