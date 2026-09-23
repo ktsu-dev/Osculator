@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Storage;
-using ktsu.Osculator.Math.Precise;
+using ktsu.Osculator.Numerics.Precise;
 using ktsu.PreciseNumber;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
