@@ -84,7 +84,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 |---|---|
 | `Osculator.Core` | `Time/`, `Elements/`, `Propagation/`, `Frames/`, `Forces/`, `Residuals/` — all generic over `TStorage` |
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
-| `Osculator.Math.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
+| `Osculator.Numerics.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
 | `Osculator.Core/Numerics` | `DecimalMath`: sqrt, sin, cos, atan2, exp, log and pow for `decimal`, which the base library has none of |
 | `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
@@ -179,17 +179,31 @@ Verified against `ktsu.PreciseNumber` 2.5.0 and `ktsu.Semantics.Quantities` 5.5.
 | [Semantics#239](https://github.com/ktsu-dev/Semantics/issues/239) | `StorageMath` is **public** |
 | [Semantics#238](https://github.com/ktsu-dev/Semantics/issues/238) | `Position3D<T>` has `Magnitude()` and `DistanceTo()` returning the V0 quantity |
 | [Semantics#240](https://github.com/ktsu-dev/Semantics/issues/240) | `GravitationalParameter<T>` exists |
-| [Semantics#244](https://github.com/ktsu-dev/Semantics/issues/244) | alias-package composability — the `PrivateAssets="all"` workaround in the four facades can be revisited |
+| [Semantics#244](https://github.com/ktsu-dev/Semantics/issues/244) | alias-package composability — the `PrivateAssets="all"` guard is gone from the four facades |
 
-Consequences for this repository, none of them yet acted on:
+Consequences for this repository, all now acted on:
 
-- **`Osculator.Math.Precise` has lost its reason to exist.** It was a placeholder for the
-  transcendentals PreciseNumber lacked. Delete it, or keep it only for anything genuinely bespoke.
-- **`StorageProbe` reimplements a Newton root** that `StorageMath` now exposes publicly.
-- **`IStorageMath<T>` is now a thin delegation for every storage type** that has transcendentals,
-  including `PreciseNumber`. It is still the right seam — it keeps the propagator free of a
-  `ITrigonometricFunctions<T>` constraint — and it now also carries `ToWorkingPrecision`, which is
-  not a delegation at all. See the domain traps.
+- **`Osculator.Math.Precise` lost its reason to exist and became `Osculator.Numerics.Precise`.**
+  It was a placeholder for the transcendentals PreciseNumber lacked; `PreciseMath` is deleted and
+  the project now holds `PreciseStorageMath` alone, named to match `Osculator.Core/Numerics` where
+  `DecimalMath` lives.
+- **The square root `DecimalMath` was writing itself now comes from `StorageMath`.** Of the seven
+  functions that module supplies, six had to be written because nothing computes them for a
+  `decimal`; the root was the seventh and Semantics already had it. Measured identical in every bit
+  across seven magnitudes from 1e-10 to 1e20 before the swap. The negative guard stays, because
+  `StorageMath.Sqrt` answers a negative radicand with an `OverflowException`, which is not what
+  went wrong.
+- **The `PrivateAssets="all"` guard is removed from the four facades**, verified rather than
+  assumed: with it gone, `Osculator.Tests` references all four and still sees no alias at all.
+- **`IStorageMath<T>` is a thin delegation for every storage type** that has transcendentals. It is
+  still the right seam — it keeps the propagator free of an `ITrigonometricFunctions<T>` constraint
+  — and it now also carries `ToWorkingPrecision`, which is not a delegation at all. See the domain
+  traps.
+
+An earlier version of this section claimed **`StorageProbe` reimplements a Newton root**. It does
+not, and never did: it contains a halving search and a power of ten, and no root of any kind. The
+line is recorded here as removed rather than silently deleted, because acting on it would have been
+work in the wrong file.
 
 Still open upstream:
 

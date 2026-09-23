@@ -9,12 +9,14 @@
   <ItemGroup>
     <!-- Exactly one alias package. Its global usings bind every quantity in this project to
          double, which is why binding four storage types takes four projects. -->
-    <!-- PrivateAssets stops the alias flowing to consumers. The alias packages ship a
-         buildTransitive props file, so without this every project referencing two or more
-         facades inherits two or more full sets of global usings and fails with hundreds of
-         CS1537 alias collisions, far from the cause. The binding is an implementation detail
-         of this facade, not part of its contract. -->
-    <PackageReference Include="ktsu.Semantics.Quantities.Double" PrivateAssets="all" />
+    <!-- This carried PrivateAssets="all" until Semantics 5.5.1. The alias packages shipped a
+         buildTransitive props file, so a project referencing two or more facades inherited two
+         or more full sets of global usings and failed with hundreds of CS1537 alias collisions,
+         far from the cause. ktsu-dev/Semantics#244 fixed that upstream and the guard is now
+         redundant: with it removed, Osculator.Tests references all four facades and still sees
+         no alias at all, which is the behaviour the guard existed to produce. Verified rather
+         than assumed, and removed so nothing here describes a bug that no longer exists. -->
+    <PackageReference Include="ktsu.Semantics.Quantities.Double" />
     <!-- The quantity types themselves. The alias package supplies only the global usings that
          bind them to one storage type, so the types arrive transitively and must be referenced. -->
     <PackageReference Include="ktsu.Semantics.Quantities" />

@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Osculator.Core", "Osculator
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Osculator.Data", "Osculator.Data\Osculator.Data.csproj", "{F35A2999-8F86-45F1-826A-DC27ED06DC5C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Osculator.Math.Precise", "Osculator.Math.Precise\Osculator.Math.Precise.csproj", "{86B68648-71EA-46E7-B843-E1D921374D94}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Osculator.Numerics.Precise", "Osculator.Numerics.Precise\Osculator.Numerics.Precise.csproj", "{86B68648-71EA-46E7-B843-E1D921374D94}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Osculator.Storage.Double", "Osculator.Storage.Double\Osculator.Storage.Double.csproj", "{8DF686B5-DFE2-4CE3-9B54-715CDEDFD178}"
 EndProject

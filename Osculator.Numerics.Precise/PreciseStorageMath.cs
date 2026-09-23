@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ktsu-dev contributors
 
-namespace ktsu.Osculator.Math.Precise;
+namespace ktsu.Osculator.Numerics.Precise;
 
 using ktsu.Osculator.Core.Propagation;
 using ktsu.PreciseNumber;
