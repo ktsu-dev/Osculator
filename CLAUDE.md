@@ -33,9 +33,12 @@ five seconds, and reports:
 
 Four things to take from that table, all of which the tests assert:
 
-1. **`double`'s arithmetic error is around ten orders of magnitude below the data term.** A median
-   of 1.6e-10 km is a sixth of a millimetre, against 0.3 to 3 km of element-set quantization. This
-   is the repository's central claim and it now has a number.
+1. **`double`'s arithmetic error is around eight and a half orders of magnitude below the data
+   term.** A median of 1.6e-10 km is a sixth of a millimetre, against a measured **0.056 km** of
+   element-set quantization. This is the repository's central claim and both sides of it are now
+   numbers. It used to read "around ten orders" against "0.3 to 3 km of element-set quantization";
+   that was a projection, the quantization has since been measured at a twentieth of it, and the
+   claim survives comfortably either way. See below.
 2. **`float` fails silently.** 55 km out and not one row reported an error: the model's error codes
    for an eccentricity or mean motion out of range are never tripped. It returns a confident wrong
    answer, which is the expensive failure mode.
@@ -53,6 +56,36 @@ CelesTrak is free, is run by one person, and asks consumers to cache and refetch
 its tests count requests through a stub transport against a clock the test moves by hand, and they
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
+
+**Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
+every usable case in the verification set, perturbs each element field by half its written step,
+propagates, and combines the eight contributions in quadrature:
+
+| | 1 day | 3 days | 7 days |
+|---|---|---|---|
+| median over 27 cases | **0.056 km** | — | **0.066 km** |
+| range | 0.010 – 0.388 km | 0.010 – 4.49 km | 0.013 – 4.58 km |
+
+Four things to take from that, all of which the tests assert:
+
+1. **It is around 0.06 km, not the 0.3–3 km the spec projects.** The projection was out by a factor
+   of five to fifty. Note carefully what is and is not measured here: this is the band of element
+   sets that *would have been written identically*, which is pure quantization of the digits on the
+   page. It is **not** how well the orbit is actually known — that includes the fit residual and the
+   deliberate degradation of public element sets, and it cannot be measured from an element set
+   alone. Both get loosely called Δ_data; only the first one is what this number is.
+2. **Mean motion never leads, in any of the 27 cases.** Written expecting it to dominate at a week,
+   since its error is a rate and therefore integrates. It does integrate and it still loses: half a
+   step is 5e-9 rev/day, about 1.5 m of phase after seven days, while half a step of an angle is
+   already 3 m at t=0. The rate has a week to catch up and does not manage it.
+3. **The term barely grows with the arc for most cases, and explodes for a few.** The median moves
+   from 0.056 to 0.066 km over a week, while 11801 goes 0.099 → 4.49 km and 16925 goes 0.187 →
+   3.09 km. Both of those are eccentricity-led, which is where a half-step in the seventh decimal
+   moves perigee enough to change the drag the orbit sees.
+4. **`MeanMotionDot` contributes exactly zero, and so does `MeanMotionDdot`.** Not small — zero.
+   `Sgp4.cs` never reads either field; all of SGP4's drag is B*. They are in every TLE because SGP,
+   the model this one replaced, used them. The perturbation is kept in the table rather than
+   dropped, because a contribution of exactly zero is the evidence.
 
 **The residual layer is in.** `Osculator.Core/Residuals/` resolves the difference between two
 states into the reference state's RIC/RSW frame. Nothing in the dimensions catches a sign or an
