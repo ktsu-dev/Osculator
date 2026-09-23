@@ -47,6 +47,13 @@ Four things to take from that table, all of which the tests assert:
    `double` at the median, worse at the extreme, and nowhere near the twelve orders of magnitude the
    digit counts suggest. See domain trap 11 for why.
 
+**M2's data layer is in.** `Osculator.Data/CelesTrak/` holds a client, a response cache and a
+snapshot store. The cache is the part with an obligation attached rather than a preference —
+CelesTrak is free, is run by one person, and asks consumers to cache and refetch infrequently — so
+its tests count requests through a stub transport against a clock the test moves by hand, and they
+were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
+age term fails one. A cache test never seen to fail is not evidence of a cache.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
@@ -108,7 +115,7 @@ long and are where the alias packages are actually demonstrated.
 
 ## Domain traps
 
-Eleven things that are easy to get wrong here and expensive to debug.
+Twelve things that are easy to get wrong here and expensive to debug.
 
 1. **`V0 − V0` returns `T.Abs(a − b)`.** `ktsu.Semantics.Quantities` decided this deliberately and
    documents it: magnitude subtraction stays non-negative. A residual is signed by definition, so
@@ -161,6 +168,14 @@ Eleven things that are easy to get wrong here and expensive to debug.
    0.715 inside the branch that already splits at 0.65, and the verification file has a case in each
    of the resulting ranges precisely because of it. Getting this wrong is not subtle once measured —
    it put 10 to 19 km on four Molniya cases — but it is invisible in any element set below 0.65.
+12. **CelesTrak's `gp.php` sends no `Last-Modified`, `ETag` or `Cache-Control`** — measured against
+   the live service, not assumed. So there is no conditional request to make and no server-stated
+   freshness to honour: the entire refetch policy is ours, which is exactly why it is tested rather
+   than documented. It also answers an unknown catalogue number with a **200 and the sentence
+   `No GP data found`**, so a successful request is not on its own a successful lookup; left
+   unchecked that reaches the JSON reader as a parse failure, which says nothing about what went
+   wrong. `CelesTrakClient` detects it, raises `CelesTrakException`, and does **not** cache it —
+   otherwise one typo would keep failing for the whole window.
 
 ## Upstream dependencies
 
