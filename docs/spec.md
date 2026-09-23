@@ -125,7 +125,7 @@ Osculator/
 │   ├─ Forces/                 EGM96 harmonics, third-body, drag, SRP
 │   └─ Residuals/              RIC/RSW decomposition, growth fits, exact statistics
 ├─ Osculator.Data/            CelesTrak, Space-Track, CDDIS/ILRS, JPL Horizons + disk cache
-├─ Osculator.Numerics.Precise/    PreciseMath: sin, cos, atan2, sqrt, exp, log, π for PreciseNumber
+├─ Osculator.Numerics.Precise/    PreciseStorageMath: sin, cos, atan2, sqrt, exp, log, π
 ├─ Osculator.Storage.Double/  one-line facade; references ktsu.Semantics.Quantities.Double
 ├─ Osculator.Storage.Float/   …Float
 ├─ Osculator.Storage.Decimal/ …Decimal
@@ -160,7 +160,7 @@ public sealed class PreciseHost : IPropagatorHost
     // global usings. Nothing in this file names the storage type.
     public StateVector Propagate(ElementSet elements, Instant at)
     {
-        Position3D r = Sgp4<PreciseNumber>.Propagate(elements, at, PreciseMath.Instance);
+        Position3D r = Sgp4<PreciseNumber>.Propagate(elements, at, PreciseStorageMath.Instance);
         return StateVector.From(r);
     }
 }
@@ -463,7 +463,7 @@ Non-negotiable gates, in order:
 | **M0** | Repository skeleton, this specification, CI | — |
 | **M1** | `Sgp4<T>` generic, `double` path | **Vallado suite passes** |
 | **M2** | CelesTrak client + cache; TLE-vs-later-TLE divergence; catalogue and globe panels | End-to-end divergence number for the ISS |
-| **M3** | `PreciseMath`, `PreciseNumber` path, high-precision π | **Performance gate (G4)**; Vallado suite passes in `PreciseNumber` |
+| **M3** | `PreciseStorageMath`, `PreciseNumber` path, high-precision π | **Performance gate (G4)**; Vallado suite passes in `PreciseNumber` |
 | **M4** | Frames (TEME↔ITRF↔GCRF), EOP; CDDIS/ILRS SP3 | LAGEOS-1 against SLR truth |
 | **M5** | Storage comparison panel; Monte-Carlo Δ_data; element inspector | **The decomposition works — the headline result** |
 | **M6** | Cowell integrator, force model; time inspector | JD staircase and long-arc round-off demos |
@@ -504,7 +504,7 @@ everything after it is elaboration.
    the name alone.
 2. **Does `BeginExternalFrameSession(IRendererBackend)` allow custom GL** interleaved with
    ImGui rendering? If so the globe is a real 3D scene rather than a CPU raster (G9).
-3. **Should `PreciseMath` live in `Osculator` or go straight upstream** into
+3. **Should `PreciseStorageMath` live in `Osculator` or go straight upstream** into
    `ktsu.PreciseNumber` as `IRootFunctions`/`ITrigonometricFunctions` implementations (G1)?
    Upstream is better for everyone and slower to land.
 4. **How much of the force model is worth building** versus using an existing .NET

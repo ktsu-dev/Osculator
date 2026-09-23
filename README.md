@@ -92,7 +92,7 @@ Speccing Osculator surfaced eleven gaps in those three libraries. Ten are filed 
 | M0 | Repository, specification, CI | — |
 | M1 | `Sgp4<T>` generic, `double` path | **Vallado verification suite passes** |
 | M2 | CelesTrak, TLE-vs-later-TLE divergence, catalogue and globe | An end-to-end divergence number |
-| M3 | `PreciseMath`, the PreciseNumber path | **Performance gate** |
+| M3 | `PreciseStorageMath`, the PreciseNumber path | **Performance gate** |
 | M4 | Frames and EOP; CDDIS/ILRS SP3 | LAGEOS-1 against laser-ranging truth |
 | M5 | Storage comparison, Monte-Carlo Δ_data, element inspector | **The decomposition works** |
 | M6 | Cowell integrator, force model, time inspector | The JD staircase |
