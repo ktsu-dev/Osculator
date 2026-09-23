@@ -87,6 +87,37 @@ Four things to take from that, all of which the tests assert:
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
 
+**The frame layer exists now, and it is honest about where it stops.** `Osculator.Core/Frames/`
+rotates TEME into the Earth-fixed frame and converts that to geodetic latitude, longitude and
+altitude. The type is `PefState<T>`, not an ITRF state, for the same reason `TemeState` is not
+called an ECI state: **polar motion is not applied**, which is about 9 m at the surface, and
+applying it needs IERS parameters and a sign convention this repository cannot yet check against
+published vectors. Guessing at a sign to claim a frame it has not earned would be worse than the
+9 m.
+
+There are no IERS test vectors here, so the transform is checked against physics instead — which
+for this one is stronger than it sounds. A geostationary satellite has to stay over one longitude,
+and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
+rotating-frame velocity while that still holds. Mutation-checked, not merely watched to pass:
+
+| mutation | what the test read |
+|---|---|
+| rotation sense flipped | the satellite wandered **179.5°** of longitude in a day, against a 1° bound |
+| the ω × r term dropped | rotating-frame speed **3.075 km/s**, exactly the inertial speed, against a 0.01 bound |
+
+Three numbers from that layer worth keeping in proportion, all measured by its tests:
+
+1. **Geodetic latitude is not geocentric latitude — 0.192° at 45°, which is 21 km on the ground.**
+   The largest error available anywhere in this layer, and the one most often shipped, because the
+   geocentric form is what a one-line `asin(z / |r|)` gives.
+2. **UT1 − UTC is worth up to 415 m at the equator**, forty times the polar motion the layer
+   deliberately omits. It is a required argument on the transform rather than an optional
+   refinement for exactly that reason: passing zero is a choice, not a default.
+3. **The ellipsoid is WGS-84 while the propagator is WGS-72, and both are right.** The WGS-72
+   constants are part of SGP4's curve fit; the ellipsoid is the surface a latitude is measured
+   against and has nothing to do with the fit. Using WGS-72's would shift altitudes by ~2 m and
+   report against a surface nobody else uses.
+
 **The residual layer is in.** `Osculator.Core/Residuals/` resolves the difference between two
 states into the reference state's RIC/RSW frame. Nothing in the dimensions catches a sign or an
 axis order — a cross product and its negation have identical dimensions — so all three conventions
