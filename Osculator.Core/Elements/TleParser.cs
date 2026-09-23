@@ -35,10 +35,14 @@ public static class TleParser
 	/// <param name="line1">The first line, beginning with <c>1</c>.</param>
 	/// <param name="line2">The second line, beginning with <c>2</c>.</param>
 	/// <param name="objectName">The object's name, where a third line carried one.</param>
+	/// <param name="checksum">Whether each line's checksum digit is verified. Verified by default.</param>
 	/// <returns>The element set, in the units the format uses: degrees and revolutions per day.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="line1"/> or <paramref name="line2"/> is null.</exception>
-	/// <exception cref="FormatException">Either line is too short or carries a field that will not parse.</exception>
-	public static ElementSet Parse(string line1, string line2, string? objectName = null)
+	/// <exception cref="FormatException">
+	/// Either line is too short, does not begin with its line number, fails its checksum, or carries
+	/// a field that will not parse.
+	/// </exception>
+	public static ElementSet Parse(string line1, string line2, string? objectName = null, TleChecksum checksum = TleChecksum.Verify)
 	{
 		Ensure.NotNull(line1);
 		Ensure.NotNull(line2);
@@ -46,6 +50,19 @@ public static class TleParser
 		if (line1.Length < MinimumLineLength || line2.Length < MinimumLineLength)
 		{
 			throw new FormatException($"A two-line element set needs {MinimumLineLength} columns per line; got {line1.Length} and {line2.Length}.");
+		}
+
+		// Both lines are long enough to parse from here on, so anything still wrong with them
+		// produces an element set rather than an error. Column 1 catches the two lines arriving
+		// swapped, and the checksum catches a line that was re-wrapped, re-typed or truncated
+		// somewhere in transit — the corruption that is otherwise indistinguishable from an orbit.
+		VerifyLineNumber(line1, '1');
+		VerifyLineNumber(line2, '2');
+
+		if (checksum == TleChecksum.Verify)
+		{
+			VerifyChecksum(line1, 1);
+			VerifyChecksum(line2, 2);
 		}
 
 		int epochYear = Integer(line1, 18, 2);
@@ -87,6 +104,68 @@ public static class TleParser
 	{
 		DateTime startOfYear = new(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 		return startOfYear.AddDays(dayOfYear - 1.0);
+	}
+
+	/// <summary>Confirms a line carries its own line number in column 1.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="expected">The digit that column holds, <c>1</c> or <c>2</c>.</param>
+	/// <exception cref="FormatException">The column holds something else.</exception>
+	private static void VerifyLineNumber(string line, char expected)
+	{
+		if (line[0] != expected)
+		{
+			throw new FormatException($"A two-line element set carries '{expected}' in column 1 of line {expected}; got '{line[0]}'. The two lines may be swapped.");
+		}
+	}
+
+	/// <summary>Confirms a line's modulo-10 checksum digit agrees with the rest of the line.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="lineNumber">The line's number, for the message.</param>
+	/// <exception cref="FormatException">The digit disagrees, or column 69 is not a digit at all.</exception>
+	private static void VerifyChecksum(string line, int lineNumber)
+	{
+		char stated = line[MinimumLineLength - 1];
+
+		if (stated is < '0' or > '9')
+		{
+			throw new FormatException($"Line {lineNumber} of a two-line element set ends with a checksum digit; column {MinimumLineLength} holds '{stated}'.");
+		}
+
+		int computed = ChecksumOf(line);
+
+		if (computed != stated - '0')
+		{
+			throw new FormatException($"Line {lineNumber} of a two-line element set fails its checksum: the line sums to {computed}, and states {stated - '0'}.");
+		}
+	}
+
+	/// <summary>Sums a line's first 68 columns the way the format's checksum does.</summary>
+	/// <param name="line">The line.</param>
+	/// <returns>The sum, modulo ten.</returns>
+	/// <remarks>
+	/// Digits count as themselves and a minus sign counts as one. Everything else — spaces, the
+	/// plus signs in the exponent fields, the classification letter and the international
+	/// designator — counts as nothing.
+	/// </remarks>
+	private static int ChecksumOf(string line)
+	{
+		int sum = 0;
+
+		for (int column = 0; column < MinimumLineLength - 1; column++)
+		{
+			char c = line[column];
+
+			if (c is >= '0' and <= '9')
+			{
+				sum += c - '0';
+			}
+			else if (c == '-')
+			{
+				sum++;
+			}
+		}
+
+		return sum % 10;
 	}
 
 	/// <summary>Reads a plain decimal field.</summary>

@@ -73,8 +73,14 @@ internal static class VerificationSet
 			// The verification file appends start, stop and step in minutes after the element fields.
 			string[] tail = line[69..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
+			// Checksums are not verified here. Five of this file's lines fail them — the three
+			// 333xx objects, which its own comments describe as constructed to provoke particular
+			// error codes, were edited from real element sets without the digit being recomputed.
+			// They are still exactly the input a correct implementation has to accept, and the
+			// reference output was produced from them as they stand, so the file is the authority
+			// and the digit is not.
 			cases.Add(new Case(
-				TleParser.Parse(pending, line),
+				TleParser.Parse(pending, line, checksum: TleChecksum.Ignore),
 				double.Parse(tail[0], CultureInfo.InvariantCulture),
 				double.Parse(tail[1], CultureInfo.InvariantCulture),
 				double.Parse(tail[2], CultureInfo.InvariantCulture)));

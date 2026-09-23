@@ -121,4 +121,51 @@ public sealed class TleParserTests
 	{
 		Assert.ThrowsExactly<FormatException>(() => TleParser.Parse("1 25544U", IssLine2));
 	}
+
+	[TestMethod]
+	public void Parse_RejectsALineWhoseChecksumDoesNotMatch()
+	{
+		// One digit of the inclination altered, 51.6310 to 51.6410, and the checksum left alone.
+		// Still 69 columns, still every field parseable — the corruption this digit exists to
+		// catch, and the reason a length check is not enough.
+		string corrupted = IssLine2.Replace("51.6310", "51.6410", StringComparison.Ordinal);
+
+		Assert.AreEqual(IssLine2.Length, corrupted.Length);
+		Assert.ThrowsExactly<FormatException>(() => TleParser.Parse(IssLine1, corrupted));
+	}
+
+	[TestMethod]
+	public void Parse_RejectsTheTwoLinesSwapped()
+	{
+		// The message is asserted rather than just the exception type, because swapped lines
+		// already threw before this check existed — some field of line 2 read at line 1's columns
+		// happens not to parse. That is an accident of these particular elements, not a guard: it
+		// says nothing about what is wrong, and a swap whose fields all parse would have gone
+		// through. Naming column 1 is what makes it a guard.
+		FormatException error = Assert.ThrowsExactly<FormatException>(() => TleParser.Parse(IssLine2, IssLine1));
+
+		Assert.Contains("column 1", error.Message, StringComparison.Ordinal);
+	}
+
+	[TestMethod]
+	public void Parse_AcceptsACorruptedChecksumWhenAskedToIgnoreIt()
+	{
+		// The escape hatch the constructed verification vectors need. Every field still has to
+		// read correctly, so this also pins that ignoring the digit ignores nothing else.
+		string corrupted = IssLine2.Replace("51.6310", "51.6410", StringComparison.Ordinal);
+
+		ElementSet elements = TleParser.Parse(IssLine1, corrupted, checksum: TleChecksum.Ignore);
+
+		Assert.AreEqual(51.6410, elements.Inclination);
+		Assert.AreEqual(25544, elements.NoradCatalogId);
+	}
+
+	[TestMethod]
+	public void Parse_ChecksTheLineNumbersEvenWhenIgnoringChecksums()
+	{
+		FormatException error = Assert.ThrowsExactly<FormatException>(
+			() => TleParser.Parse(IssLine2, IssLine1, checksum: TleChecksum.Ignore));
+
+		Assert.Contains("column 1", error.Message, StringComparison.Ordinal);
+	}
 }
