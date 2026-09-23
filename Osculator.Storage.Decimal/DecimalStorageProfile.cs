@@ -8,9 +8,18 @@ using ktsu.Osculator.Core.Storage;
 /// The storage profile for <c>decimal</c>.
 /// </summary>
 /// <remarks>
-/// Twenty-eight significant digits with no binary rounding, at a large cost in speed. It sits between
-/// the two binary floats and the arbitrary-precision reference, and is the storage type that shows
-/// the arithmetic term shrinking smoothly rather than collapsing to zero.
+/// <para>
+/// Twenty-eight significant digits with no binary rounding — but only at unit magnitude. Its
+/// precision is <em>absolute</em> rather than relative: the type is a 96-bit integer with a scale
+/// capped at twenty-eight decimal places, so a value of order 1e-20 has room for eight significant
+/// digits where a <see langword="double"/> still has sixteen. The two cross at 1e-12.
+/// </para>
+/// <para>
+/// That is not a footnote. Measured over the whole verification set, its twelve extra digits buy a
+/// factor of 2.8 against <see langword="double"/> at the median and lose a factor of 5.6 at the
+/// extreme, because SGP4's drag coefficients sit at and below the crossover. See
+/// <c>StorageComparisonTests</c>.
+/// </para>
 /// </remarks>
 public sealed class DecimalStorageProfile : IStorageProfile
 {
