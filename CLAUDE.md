@@ -124,6 +124,30 @@ axis order — a cross product and its negation have identical dimensions — so
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
+**Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
+checks the harness rather than the result. Two claims:
+
+| claim | measured |
+|---|---|
+| the 30-digit reference is converged | 30 vs 40 digits differ by **4.765e-21 km** worst over 666 rows |
+| the harness reproduces itself exactly | two 30-digit runs agree to **every digit**, not nearly |
+
+The first is what makes every other number in the comparison mean anything. A thirty-digit run is
+not exact arithmetic, it is thirty-digit arithmetic; if its own error were anywhere near the
+1.6e-10 km it is used to measure, the central claim would be measuring the reference rather than
+`double`. It is **eleven orders below** that, so it is not.
+
+**The gate has a guard against passing vacuously, and that guard was added because the first
+version would have.** A harness whose precision argument never reached the arithmetic — so that
+the probe was secretly the reference — reports a difference of exactly zero, which sailed through
+an upper bound of 1e-15. The test now requires the difference to be **non-zero** first. Verified by
+clamping `PreciseStorageMath.SignificantDigits` to 30: the sweep reads 0.000e+000 and the guard
+fires.
+
+It costs about twelve seconds, because it sweeps the whole verification set twice in
+`PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
+check that validates the repository's central claim.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
