@@ -120,11 +120,19 @@ public sealed class EarthOrientationTable
 
 		int after = IndexAtOrAfter(mjd);
 
-		if (rows[after].ModifiedJulianDate == mjd || after == 0)
+		// The first row has no predecessor to interpolate from, and the range check above means
+		// reaching it at all requires the instant to be exactly on it.
+		if (after == 0)
 		{
-			return rows[after].ToOrientation();
+			return rows[0].ToOrientation();
 		}
 
+		// There is deliberately no "landed exactly on a row" fast path. It would be an equality
+		// comparison between doubles, and it would buy nothing: an instant on a row interpolates
+		// at t = 1, which returns that row's values bit for bit, and an instant a single ulp off a
+		// row interpolates at t within an ulp of 1, which returns them to within an ulp — about
+		// 1e-17 arcseconds, or a picometre at the Earth's surface. The branch could only ever
+		// change the answer by less than the arithmetic it was skipping.
 		Row before = rows[after - 1];
 		Row next = rows[after];
 		double span = next.ModifiedJulianDate - before.ModifiedJulianDate;
