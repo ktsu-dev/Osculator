@@ -87,13 +87,44 @@ Four things to take from that, all of which the tests assert:
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
 
+**The frame layer reaches the ITRF now, and gate 3's sign conventions are checked rather than
+recalled.** `Osculator.Data/Iers/` reads the IERS `finals2000A.all.csv` series — open, no account,
+unlike the laser-ranging archives — and supplies the two things the transform could not previously
+be given: UT1 − UTC and the pole coordinates. `EarthFixedFrame` now takes an `EarthOrientation`
+rather than a bare `double`, which closes a hole the previous version shipped: it *required* a
+UT1 − UTC argument that nothing in the repository could produce.
+
+Three things worth knowing before touching any of it:
+
+- **The polar-motion sign convention is pinned by the published definition, not by this code's own
+  arithmetic.** IERS TN36 eq 5.3 gives `r_TIRS = W·r_ITRS` with `W = R3(−s′)·R2(xₚ)·R1(yₚ)`, so
+  the way this code goes is `r_ITRS = R1(−yₚ)·R2(−xₚ)·r_TIRS`; `s′` is under a microarcsecond and
+  is dropped. The test applies it to the PEF z axis and asserts the result is ITRS `(xₚ, −yₚ, 1)`,
+  which *is* what the pole coordinates mean. Flipping either sign fails it, and each failure names
+  the convention it broke.
+- **A rotation's inverse is its transpose, and that is the whole of the inversion.** `ItrfToPef`
+  was first written negating the angles *as well*, which flips the sines twice and undoes it. It
+  read 10.9 m of round-trip error, then 18.8 m after a partial fix; the transpose was simply
+  written out wrong in its third row. Neither would have been visible without the round-trip test.
+- **Rows with no values are dropped at parse time.** The file's last ~50 rows carry a date and
+  nothing else, because the IERS publishes the date grid further ahead than it forecasts for it. A
+  parser that reads an empty field as zero produces a legal-looking UT1 − UTC of 0, which is
+  exactly the 415 m error the required argument exists to prevent. An instant past the last real
+  row is refused by name rather than extrapolated.
+
+Measured against the real 20,040-line file: 19,990 usable rows, covering MJD 41684–61673.
+2000-01-01 reads UT1 − UTC = 0.3554779 s, which is the known J2000 value — an independent check
+that the column mapping is right. Today's values come back flagged `IsPrediction`, correctly: the
+IERS finalises about a week in arrears, and a forecast's stated uncertainty on UT1 − UTC runs from
+four times the final one to a thousand times it a year out.
+
 **The frame layer exists now, and it is honest about where it stops.** `Osculator.Core/Frames/`
 rotates TEME into the Earth-fixed frame and converts that to geodetic latitude, longitude and
-altitude. The type is `PefState<T>`, not an ITRF state, for the same reason `TemeState` is not
-called an ECI state: **polar motion is not applied**, which is about 9 m at the surface, and
-applying it needs IERS parameters and a sign convention this repository cannot yet check against
-published vectors. Guessing at a sign to claim a frame it has not earned would be worse than the
-9 m.
+altitude. `PefState<T>` remains the named intermediate — TEME → PEF is the sidereal rotation, PEF →
+ITRF is polar motion — so a caller that only wants a map can stop at PEF and one that wants a
+residual cannot reach `Geodetic` without going all the way, because that overload takes
+`ItrfState<T>`. Polar motion is about 12 m at the surface for present-day pole coordinates, not the
+9 m first estimated here.
 
 There are no IERS test vectors here, so the transform is checked against physics instead — which
 for this one is stronger than it sounds. A geostationary satellite has to stay over one longitude,
