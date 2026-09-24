@@ -38,7 +38,7 @@ public sealed class FrameTests
 		TemeState<double> teme = new(4821.7, -3112.4, 5908.2, 3.114, 6.402, -1.877);
 		JulianDate epoch = JulianDate.FromCalendar(2026, 9, 23, 6, 0, 0.0);
 
-		PefState<double> pef = EarthFixedFrame<double>.FromTeme(teme, epoch, 0.0, Math);
+		PefState<double> pef = EarthFixedFrame<double>.ToPef(teme, epoch, EarthOrientation.Ignored, Math);
 
 		Assert.AreEqual(teme.Z, pef.Z, 1e-12, "A rotation about z leaves z alone.");
 		Assert.AreEqual(
@@ -54,8 +54,9 @@ public sealed class FrameTests
 		TemeState<double> teme = new(4821.7, -3112.4, 5908.2, 3.114, 6.402, -1.877);
 		JulianDate epoch = JulianDate.FromCalendar(2026, 9, 23, 6, 0, 0.0);
 
-		PefState<double> pef = EarthFixedFrame<double>.FromTeme(teme, epoch, 0.3, Math);
-		TemeState<double> back = EarthFixedFrame<double>.ToTeme(pef, epoch, 0.3, Math);
+		EarthOrientation orientation = new(0.0, 0.0, 0.3, IsPrediction: false);
+		PefState<double> pef = EarthFixedFrame<double>.ToPef(teme, epoch, orientation, Math);
+		TemeState<double> back = EarthFixedFrame<double>.PefToTeme(pef, epoch, orientation, Math);
 
 		Assert.AreEqual(teme.X, back.X, 1e-9);
 		Assert.AreEqual(teme.Y, back.Y, 1e-9);
@@ -99,8 +100,8 @@ public sealed class FrameTests
 		// thousand out, and invisible to any test that only looks at position.
 		Sgp4Satellite<double> satellite = Load(GeostationaryCatalogId, out ElementSet elements);
 		TemeState<double> teme = StateAt(satellite, 120.0);
-		PefState<double> pef = EarthFixedFrame<double>.FromTeme(
-			teme, At(elements, 120.0), 0.0, Math);
+		PefState<double> pef = EarthFixedFrame<double>.ToPef(
+			teme, At(elements, 120.0), EarthOrientation.Ignored, Math);
 
 		double inertialSpeed = Speed(teme.VelocityX, teme.VelocityY, teme.VelocityZ);
 		double rotatingSpeed = Speed(pef.VelocityX, pef.VelocityY, pef.VelocityZ);
@@ -115,7 +116,7 @@ public sealed class FrameTests
 	{
 		Sgp4Satellite<double> satellite = Load(GeostationaryCatalogId, out ElementSet elements);
 		GeodeticPosition<double> position = Geodetic<double>.FromEarthFixed(
-			EarthFixedFrame<double>.FromTeme(StateAt(satellite, 0.0), At(elements, 0.0), 0.0, Math), Math);
+			EarthFixedFrame<double>.ToItrf(StateAt(satellite, 0.0), At(elements, 0.0), EarthOrientation.Ignored, Math), Math);
 
 		// 42164 km radius minus the equatorial radius.
 		Assert.AreEqual(35786.0, position.AltitudeKilometers, 60.0);
@@ -129,7 +130,7 @@ public sealed class FrameTests
 		// measured rather than asserted. The geocentric form is what a one-line asin(z / |r|)
 		// gives, and it is the single most common defect in amateur ground tracks.
 		GeodeticPosition<double> at45 = new(System.Math.PI / 4.0, 0.0, 0.0);
-		PefState<double> earthFixed = Geodetic<double>.ToEarthFixed(at45, Math);
+		ItrfState<double> earthFixed = Geodetic<double>.ToEarthFixed(at45, Math);
 
 		double radius = System.Math.Sqrt(
 			(earthFixed.X * earthFixed.X) + (earthFixed.Y * earthFixed.Y) + (earthFixed.Z * earthFixed.Z));
@@ -169,8 +170,9 @@ public sealed class FrameTests
 		TemeState<double> teme = StateAt(satellite, 0.0);
 		JulianDate epoch = At(elements, 0.0);
 
-		PefState<double> withoutOffset = EarthFixedFrame<double>.FromTeme(teme, epoch, 0.0, Math);
-		PefState<double> withOffset = EarthFixedFrame<double>.FromTeme(teme, epoch, 0.9, Math);
+		PefState<double> withoutOffset = EarthFixedFrame<double>.ToPef(teme, epoch, EarthOrientation.Ignored, Math);
+		PefState<double> withOffset = EarthFixedFrame<double>.ToPef(
+			teme, epoch, new EarthOrientation(0.0, 0.0, 0.9, IsPrediction: false), Math);
 
 		double shiftKm = System.Math.Sqrt(
 			System.Math.Pow(withOffset.X - withoutOffset.X, 2)
@@ -241,6 +243,6 @@ public sealed class FrameTests
 
 	private static double LongitudeDegrees(Sgp4Satellite<double> satellite, ElementSet elements, double minutes) =>
 		Degrees(Geodetic<double>.FromEarthFixed(
-			EarthFixedFrame<double>.FromTeme(StateAt(satellite, minutes), At(elements, minutes), 0.0, Math),
+			EarthFixedFrame<double>.ToItrf(StateAt(satellite, minutes), At(elements, minutes), EarthOrientation.Ignored, Math),
 			Math).LongitudeRadians);
 }

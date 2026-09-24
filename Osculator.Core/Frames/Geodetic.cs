@@ -23,7 +23,7 @@ public readonly record struct GeodeticPosition<T>(T LatitudeRadians, T Longitude
 	where T : struct, INumber<T>;
 
 /// <summary>
-/// Converts between the Earth-fixed frame and geodetic coordinates on the WGS-84 ellipsoid.
+/// Converts between the ITRF and geodetic coordinates on the WGS-84 ellipsoid.
 /// </summary>
 /// <typeparam name="T">The numeric storage type.</typeparam>
 /// <remarks>
@@ -34,6 +34,12 @@ public readonly record struct GeodeticPosition<T>(T LatitudeRadians, T Longitude
 /// against, nothing to do with the fit — and WGS-84 is what every map, every GPS receiver and
 /// every ground station uses. Using the WGS-72 ellipsoid instead would shift altitudes by about
 /// <strong>2 metres</strong> and report latitudes against a surface nobody else is using.
+/// </para>
+/// <para>
+/// <strong>The ITRF and not the PEF</strong>, because that is the frame a geodetic latitude is
+/// defined against — the crust, not the instantaneous rotation axis. Feeding a
+/// <see cref="PefState{T}"/> here would be wrong by the polar-motion term, about 12 m, and the
+/// type system now refuses it.
 /// </para>
 /// <para>
 /// The latitude solve is the standard fixed-point iteration rather than a closed form. It converges
@@ -60,11 +66,11 @@ public static class Geodetic<T>
 	/// <summary>
 	/// Converts an Earth-fixed position to geodetic latitude, longitude and altitude.
 	/// </summary>
-	/// <param name="state">The Earth-fixed state. Only its position is read.</param>
+	/// <param name="state">The ITRF state. Only its position is read.</param>
 	/// <param name="math">The transcendental functions for <typeparamref name="T"/>.</param>
 	/// <returns>The geodetic position.</returns>
 	/// <exception cref="ArithmeticException">The latitude iteration did not settle.</exception>
-	public static GeodeticPosition<T> FromEarthFixed(PefState<T> state, IStorageMath<T> math)
+	public static GeodeticPosition<T> FromEarthFixed(ItrfState<T> state, IStorageMath<T> math)
 	{
 		Ensure.NotNull(math);
 
@@ -109,14 +115,14 @@ public static class Geodetic<T>
 	/// </summary>
 	/// <param name="position">The geodetic position.</param>
 	/// <param name="math">The transcendental functions for <typeparamref name="T"/>.</param>
-	/// <returns>The Earth-fixed position, with zero velocity.</returns>
+	/// <returns>The ITRF position, with zero velocity.</returns>
 	/// <remarks>
 	/// Closed form, unlike the reverse, and that asymmetry is the whole reason the reverse needs an
 	/// iteration: going this way the latitude is given, and going back it is what is being solved
 	/// for. Velocity comes back zero because a geodetic position carries none — a ground station is
 	/// at rest in this frame by definition.
 	/// </remarks>
-	public static PefState<T> ToEarthFixed(GeodeticPosition<T> position, IStorageMath<T> math)
+	public static ItrfState<T> ToEarthFixed(GeodeticPosition<T> position, IStorageMath<T> math)
 	{
 		Ensure.NotNull(math);
 
@@ -125,7 +131,7 @@ public static class Geodetic<T>
 		T radiusOfCurvature = SemiMajorAxisKm / math.Sqrt(T.One - (EccentricitySquared * sinLatitude * sinLatitude));
 		T equatorialDistance = (radiusOfCurvature + position.AltitudeKilometers) * cosLatitude;
 
-		return new PefState<T>(
+		return new ItrfState<T>(
 			equatorialDistance * math.Cos(position.LongitudeRadians),
 			equatorialDistance * math.Sin(position.LongitudeRadians),
 			((radiusOfCurvature * (T.One - EccentricitySquared)) + position.AltitudeKilometers) * sinLatitude,
@@ -137,7 +143,7 @@ public static class Geodetic<T>
 	/// <summary>
 	/// Height above the ellipsoid.
 	/// </summary>
-	/// <param name="state">The Earth-fixed state.</param>
+	/// <param name="state">The ITRF state.</param>
 	/// <param name="equatorialDistance">Distance from the spin axis, in kilometres.</param>
 	/// <param name="latitude">The settled geodetic latitude.</param>
 	/// <param name="radiusOfCurvature">The prime vertical radius of curvature at that latitude.</param>
@@ -150,7 +156,7 @@ public static class Geodetic<T>
 	/// the poles the sine form is the well-conditioned one, and the crossover at 45 degrees is
 	/// where both are equally comfortable.
 	/// </remarks>
-	private static T Altitude(PefState<T> state, T equatorialDistance, T latitude, T radiusOfCurvature, IStorageMath<T> math)
+	private static T Altitude(ItrfState<T> state, T equatorialDistance, T latitude, T radiusOfCurvature, IStorageMath<T> math)
 	{
 		T sin = math.Sin(latitude);
 		T cos = math.Cos(latitude);
