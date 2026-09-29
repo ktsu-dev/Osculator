@@ -251,7 +251,16 @@ public static class EarthFixedFrame<T>
 		// keeps the precision it exists for.
 		double ut1Fraction = epoch.DayFraction + (ut1MinusUtcSeconds / 86400.0);
 
-		return DeepSpace<T>.GreenwichSiderealTime(
-			T.CreateChecked(epoch.Day) + T.CreateChecked(ut1Fraction), math);
+		// Sidereal time is a function of the instant, not of the storage type the state is kept in,
+		// so it is evaluated in double and only the finished angle is converted. Doing it in T threw
+		// the precision away the moment the date was formed: near JD 2.46e6 consecutive floats are a
+		// quarter of a day apart, so every instant snapped to a 6-hour mark and GMST was up to 45°
+		// out, about 4,700 km at the surface. Moving only the date to double is not enough either,
+		// because the seconds polynomial reaches ~8e8 s, which float resolves to ~64 s. It is still
+		// DeepSpace's routine, so the pairing with SGP4's equinox holds for every storage type.
+		double theta = DeepSpace<double>.GreenwichSiderealTime(
+			epoch.Day + ut1Fraction, DoubleStorageMath.Instance);
+
+		return T.CreateChecked(theta);
 	}
 }
