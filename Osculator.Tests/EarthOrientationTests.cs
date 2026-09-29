@@ -17,6 +17,15 @@ public sealed class EarthOrientationTests
 {
 	private static readonly DoubleStorageMath Math = DoubleStorageMath.Instance;
 
+	/// <summary>
+	/// Two rows either side of the 2016-12-31 leap second, with UT1 − UTC at the IERS values
+	/// rounded to the millisecond. The pole coordinates are placeholders; only UT1 − UTC is read.
+	/// </summary>
+	private const string LeapSecondCsv =
+		"MJD;Year;Month;Day;Type;x_pole;sigma_x_pole;y_pole;sigma_y_pole;x_rate;sigma_x_rate;y_rate;sigma_y_rate;Type;UT1-UTC;sigma_UT1-UTC;LOD;sigma_LOD;Type;dPsi;sigma_dPsi;dEpsilon;sigma_dEpsilon;dX;sigma_dX;dY;sigma_dY;Type;bulB/x_pole;bulB/y_pole;Type;bulB/UT-UTC;Type;bulB/dPsi;bulB/dEpsilon;bulB/dX;bulB/dY\n" +
+		"57753;2016;12;31;final;0.100000;0.000090;0.300000;0.000090;;;;;final;-0.5920000;0.0000100;;;final;;;;;;;;;;;;;;;;;;\n" +
+		"57754;2017;01;01;final;0.100000;0.000090;0.300000;0.000090;;;;;final;0.4080000;0.0000100;;;final;;;;;;;;;;;;;;;;;;";
+
 	/// <summary>MJD 61296, one of the sample's final rows.</summary>
 	private static JulianDate At(double modifiedJulianDate) =>
 		new(2400000.5 + System.Math.Floor(modifiedJulianDate), modifiedJulianDate - System.Math.Floor(modifiedJulianDate));
@@ -63,6 +72,22 @@ public sealed class EarthOrientationTests
 
 		Assert.AreEqual((0.194510 + 0.192933) / 2.0, midday.PoleXArcseconds, 1e-9);
 		Assert.AreEqual((-0.0050574 + -0.0061769) / 2.0, midday.Ut1MinusUtcSeconds, 1e-12);
+	}
+
+	[TestMethod]
+	public void TheDayBeforeALeapSecondDoesNotDriftTowardTheNextSecond()
+	{
+		// The 2016-12-31 leap second: UT1 − UTC steps by +1 s at 0h on 2017-01-01. Interpolating
+		// straight across the step read −0.092 s at midday on the 31st, half a second of rotation
+		// and 232 m at the equator. Within the day the real value moves by about a millisecond.
+		EarthOrientationTable table = EarthOrientationTable.Parse(LeapSecondCsv);
+
+		Assert.AreEqual(-0.592, table.At(At(57753.5)).Ut1MinusUtcSeconds, 1e-3,
+			"Midday before a leap second should stay on the pre-leap value.");
+		Assert.AreEqual(-0.592, table.At(At(57753.999)).Ut1MinusUtcSeconds, 1e-3,
+			"The step should not leak into the last minutes of the day either.");
+		Assert.AreEqual(0.408, table.At(At(57754.0)).Ut1MinusUtcSeconds, 1e-12,
+			"From 0h on the next row the post-leap value applies.");
 	}
 
 	[TestMethod]

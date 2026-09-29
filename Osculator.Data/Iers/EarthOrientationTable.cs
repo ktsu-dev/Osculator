@@ -138,10 +138,24 @@ public sealed class EarthOrientationTable
 		double span = next.ModifiedJulianDate - before.ModifiedJulianDate;
 		double t = (mjd - before.ModifiedJulianDate) / span;
 
+		// UT1 − UTC is not continuous: it steps by a whole second at every leap second, which lands
+		// at 0h UTC on the later row's date. Interpolating straight through that step drags the
+		// whole preceding day toward the post-leap value — up to ~465 m of rotation at the equator
+		// just before midnight. The real day-to-day change is a few milliseconds, so any whole
+		// second in the difference is the step, and taking it out keeps the value continuous within
+		// the day and puts the jump exactly on the later row. At t = 1 the instant is on that row,
+		// after the step, so the step goes back in and the row's own value comes out.
+		double ut1Delta = next.Ut1MinusUtcSeconds - before.Ut1MinusUtcSeconds;
+		double leapStep = Math.Round(ut1Delta);
+		double ut1Drift = ut1Delta - leapStep;
+		double ut1MinusUtc = t < 1.0
+			? before.Ut1MinusUtcSeconds + (ut1Drift * t)
+			: next.Ut1MinusUtcSeconds;
+
 		return new EarthOrientation(
 			before.PoleXArcseconds + ((next.PoleXArcseconds - before.PoleXArcseconds) * t),
 			before.PoleYArcseconds + ((next.PoleYArcseconds - before.PoleYArcseconds) * t),
-			before.Ut1MinusUtcSeconds + ((next.Ut1MinusUtcSeconds - before.Ut1MinusUtcSeconds) * t),
+			ut1MinusUtc,
 
 			// Either neighbour being a forecast makes the answer one. A value blended from a
 			// measurement and a forecast is not a measurement.
