@@ -67,6 +67,37 @@ public sealed class FrameTests
 	}
 
 	[TestMethod]
+	public void FloatSiderealTimeTracksDoubleWithinASixHourWindow()
+	{
+		// Near JD 2.46e6 consecutive floats are a quarter of a day apart. Forming the date in float
+		// before taking GMST snapped every instant to a 6-hour mark: 03:07 read 95° against 52°,
+		// and the point below landed 4,700 km from where double put it.
+		TemeState<float> tFloat = new(6378.137f, 0f, 0f, 0f, 0f, 0f);
+		TemeState<double> tDouble = new(6378.137, 0.0, 0.0, 0.0, 0.0, 0.0);
+		List<float> xs = [];
+
+		foreach (int hour in new[] { 0, 1, 3, 5 })
+		{
+			JulianDate epoch = JulianDate.FromCalendar(2026, 9, 26, hour, 7, 0.0);
+
+			double angleDouble = EarthFixedFrame<double>.SiderealAngle(epoch, 0.0, Math);
+			float angleFloat = EarthFixedFrame<float>.SiderealAngle(epoch, 0.0, FloatStorageMath.Instance);
+			Assert.AreEqual(angleDouble, angleFloat, 1e-5, $"GMST at {hour:00}:07 should track double.");
+
+			PefState<float> pefFloat = EarthFixedFrame<float>.ToPef(tFloat, epoch, EarthOrientation.Ignored, FloatStorageMath.Instance);
+			PefState<double> pefDouble = EarthFixedFrame<double>.ToPef(tDouble, epoch, EarthOrientation.Ignored, Math);
+			double separation = System.Math.Sqrt(
+				((pefFloat.X - pefDouble.X) * (pefFloat.X - pefDouble.X)) +
+				((pefFloat.Y - pefDouble.Y) * (pefFloat.Y - pefDouble.Y)));
+			Assert.IsLessThan(0.1, separation, $"At {hour:00}:07 float should land within 100 m of double, not {separation:F1} km away.");
+
+			xs.Add(pefFloat.X);
+		}
+
+		Assert.HasCount(4, new HashSet<float>(xs), "Instants within one 6-hour window should not collapse to one angle.");
+	}
+
+	[TestMethod]
 	public void AGeostationarySatelliteStaysOverOneLongitude()
 	{
 		// The test the whole transform exists to pass, and the one a sign error cannot survive:
