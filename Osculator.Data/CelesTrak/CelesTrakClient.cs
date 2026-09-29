@@ -5,6 +5,7 @@ namespace ktsu.Osculator.Data.CelesTrak;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ktsu.Osculator.Core.Elements;
@@ -40,7 +41,7 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
 	/// <returns>The element sets the service returned, usually exactly one.</returns>
-	/// <exception cref="HttpRequestException">The request failed and nothing was cached.</exception>
+	/// <exception cref="CelesTrakException">The request failed and nothing was cached.</exception>
 	public async Task<IReadOnlyList<ElementSet>> GetObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
 		OmmJson.Read(await GetRawObjectAsync(noradCatalogId, cancellationToken).ConfigureAwait(false));
 
@@ -51,7 +52,7 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 	/// <param name="cancellationToken">Cancels the request.</param>
 	/// <returns>The element sets the service returned.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="group"/> is null.</exception>
-	/// <exception cref="HttpRequestException">The request failed and nothing was cached.</exception>
+	/// <exception cref="CelesTrakException">The request failed and nothing was cached.</exception>
 	public async Task<IReadOnlyList<ElementSet>> GetGroupAsync(string group, CancellationToken cancellationToken = default) =>
 		OmmJson.Read(await GetRawGroupAsync(group, cancellationToken).ConfigureAwait(false));
 
@@ -113,13 +114,21 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 				throw new CelesTrakException(FormattableString.Invariant($"CelesTrak has no element set for {query}."));
 			}
 
+			// Parsed before it is written, as IersClient does, so a proxy error page, a rate-limit
+			// page or a truncated body served as a 200 never displaces a good cached copy.
+			_ = OmmJson.Read(body);
+
 			Cache.Write(query, body);
 			return body;
 		}
-		catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException)
+		catch (Exception failure) when (
+			failure is HttpRequestException or JsonException
+			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
 		{
 			// Last week's elements still propagate. An application that cannot start without a
-			// network is worse than one that starts with something old and says so.
+			// network is worse than one that starts with something old and says so. A timeout falls
+			// back; the caller's own cancellation does not, because returning stale data from a call
+			// the caller abandoned would report it as a success.
 			string? stale = Cache.ReadAtAnyAge(query);
 
 			return stale ?? throw new CelesTrakException(

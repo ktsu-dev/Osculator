@@ -101,6 +101,24 @@ public sealed class IersClientTests
 	}
 
 	[TestMethod]
+	public async Task TheCallersOwnCancellationIsNotAnsweredFromTheStaleCache()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		FakeClock clock = new(new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero));
+		IersClient client = ClientOver(handler, clock, TimeSpan.FromDays(1));
+
+		await client.GetTableAsync().ConfigureAwait(false);
+		clock.Advance(TimeSpan.FromDays(2));
+
+		using CancellationTokenSource cancelled = new();
+		await cancelled.CancelAsync().ConfigureAwait(false);
+
+		// Stale data from an abandoned call would read as a success. Cancelling is not a timeout.
+		await Assert.ThrowsAsync<OperationCanceledException>(
+			() => client.GetTableAsync(cancelled.Token)).ConfigureAwait(false);
+	}
+
+	[TestMethod]
 	public async Task WithTheNetworkGoneAndNothingCachedItSaysSo()
 	{
 		CountingHandler handler = Transport(IersSample.Csv);

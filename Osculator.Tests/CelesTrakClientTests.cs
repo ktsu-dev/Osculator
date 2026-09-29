@@ -136,6 +136,51 @@ public sealed class CelesTrakClientTests
 	}
 
 	[TestMethod]
+	public async Task AnUnparseableSuccessDoesNotDisplaceTheGoodCachedCopy()
+	{
+		CountingHandler handler = Transport(IssResponse);
+		FakeClock clock = new(new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero));
+		CelesTrakClient client = ClientOver(handler, clock, TimeSpan.FromHours(4));
+
+		await client.GetObjectAsync(25544).ConfigureAwait(false);
+
+		// Past the window, a proxy answers 200 with an error page. That used to be cached as fresh,
+		// and every later lookup — online or off — then failed to parse it.
+		clock.Advance(TimeSpan.FromHours(5));
+		handler.Body = "<html>503 upstream</html>";
+
+		IReadOnlyList<ElementSet> afterBadBody = await client.GetObjectAsync(25544).ConfigureAwait(false);
+		Assert.HasCount(1, afterBadBody, "A bad body should fall back to the good copy.");
+		Assert.AreEqual(25544, afterBadBody[0].NoradCatalogId);
+
+		// And the cache should still hold the good copy when the network then goes away.
+		handler.FailWith = new HttpRequestException("no route to host");
+		clock.Advance(TimeSpan.FromHours(5));
+
+		IReadOnlyList<ElementSet> offline = await client.GetObjectAsync(25544).ConfigureAwait(false);
+		Assert.HasCount(1, offline, "The good copy should have survived the bad body.");
+		Assert.AreEqual(3, handler.Requests);
+	}
+
+	[TestMethod]
+	public async Task TheCallersOwnCancellationIsNotAnsweredFromTheStaleCache()
+	{
+		CountingHandler handler = Transport(IssResponse);
+		FakeClock clock = new(new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero));
+		CelesTrakClient client = ClientOver(handler, clock, TimeSpan.FromHours(4));
+
+		await client.GetObjectAsync(25544).ConfigureAwait(false);
+		clock.Advance(TimeSpan.FromHours(5));
+
+		using CancellationTokenSource cancelled = new();
+		await cancelled.CancelAsync().ConfigureAwait(false);
+
+		// Stale data from an abandoned call would read as a success. Cancelling is not a timeout.
+		await Assert.ThrowsAsync<OperationCanceledException>(
+			() => client.GetObjectAsync(25544, cancelled.Token)).ConfigureAwait(false);
+	}
+
+	[TestMethod]
 	public async Task AFailedRequestWithNothingCachedIsAnError()
 	{
 		CountingHandler handler = Transport(IssResponse);
@@ -252,6 +297,12 @@ public sealed class CelesTrakClientTests
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
 		{
 			Requests++;
+
+			// A real transport abandons a cancelled request, and so does this one.
+			if (cancellationToken.IsCancellationRequested)
+			{
+				return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
+			}
 
 			return FailWith is not null
 				? Task.FromException<HttpResponseMessage>(FailWith)

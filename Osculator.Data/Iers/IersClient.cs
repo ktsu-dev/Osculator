@@ -61,8 +61,12 @@ public sealed class IersClient(HttpClient http, ResponseCache cache)
 
 			return table;
 		}
-		catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or FormatException)
+		catch (Exception failure) when (
+			failure is HttpRequestException or FormatException
+			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
 		{
+			// A timeout falls back; the caller's own cancellation does not, because returning stale
+			// data from a call the caller abandoned would report it as a success.
 			string? stale = cache.ReadAtAnyAge(CacheKey);
 
 			return stale is not null
