@@ -116,7 +116,9 @@ public sealed class OmmCacheFallbackTests
 		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
 			FailWith is not null
 				? Task.FromException<HttpResponseMessage>(FailWith)
-				: Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Body) });
+				: Task.FromResult(Respond());
+
+		private HttpResponseMessage Respond() => new(HttpStatusCode.OK) { Content = new StringContent(Body) };
 	}
 
 	/// <summary>A clock the test moves by hand.</summary>
