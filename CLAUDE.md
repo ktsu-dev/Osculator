@@ -175,6 +175,15 @@ an upper bound of 1e-15. The test now requires the difference to be **non-zero**
 clamping `PreciseStorageMath.SignificantDigits` to 30: the sweep reads 0.000e+000 and the guard
 fires.
 
+**Neither half of the gate can see the reference computing in `double`**, because a conversion
+through `double` is deterministic and both runs share it — routing four functions through it made
+the convergence sweep read *better* (#25). `PreciseStorageMathTests` closes that: every function is
+checked against digits computed by mpmath, at 30 and at 100 digits, and routing any one of `Sqrt`,
+`Sin`, `Cos`, `Atan2` or `Pow` through `double` fails it. Mutation-checked, one function at a time.
+`Pow` computes its fractional path itself, because PreciseNumber's two-argument `Pow` stops at fifty
+digits for short operands (#67), and `IStorageMath<T>.Divide` is the seam for literal-over-literal
+quotients, which the `/` operator rounds to fifty digits whatever precision was asked for (#42).
+
 It costs about twelve seconds, because it sweeps the whole verification set twice in
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
