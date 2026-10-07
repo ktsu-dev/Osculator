@@ -118,9 +118,8 @@ public sealed class Cowell<T>
 				rejected++;
 			}
 
-			double growth = errorRatio == 0.0
-				? MaximumGrowth
-				: Math.Clamp(SafetyFactor * Math.Pow(errorRatio, -1.0 / DormandPrince87<T>.Order), MinimumGrowth, MaximumGrowth);
+			// A zero error ratio raises to +∞, which the clamp turns into the largest growth allowed.
+			double growth = Math.Clamp(SafetyFactor * Math.Pow(errorRatio, -1.0 / DormandPrince87<T>.Order), MinimumGrowth, MaximumGrowth);
 
 			// A rejected last step was clipped to fit the arc, so grow from the clipped step rather
 			// than the one the controller asked for.
