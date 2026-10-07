@@ -5,6 +5,7 @@ namespace ktsu.Osculator.Data.Horizons;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using ktsu.Osculator.Core.Time;
 
@@ -228,10 +229,8 @@ public static class HorizonsVectorTable
 
 	private static string FirstMeaningfulLine(string[] lines)
 	{
-		foreach (string line in lines)
+		foreach (string trimmed in lines.Select(line => line.Trim()))
 		{
-			string trimmed = line.Trim();
-
 			if (trimmed.Length > 0 && trimmed.Trim('*').Length > 0 && !trimmed.StartsWith("API ", StringComparison.Ordinal))
 			{
 				return trimmed;
