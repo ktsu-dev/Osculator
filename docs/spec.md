@@ -445,8 +445,12 @@ Non-negotiable gates, in order:
 1. **SGP4 against Vallado's official verification suite** (`SGP4-VER.TLE` + `tcppver.out`),
    which specifies expected positions to 10⁻⁸ km. Until this passes in `double`, nothing else
    in the application means anything.
-2. **The same suite in every storage type**, with the tolerance scaled to the type. `float`
-   will not meet 10⁻⁸ km and is not expected to — recording *where* it fails is a result.
+2. **The same suite in every storage type**, with the tolerance scaled to the type: 10⁻⁸ km for
+   `double`, and 10⁻⁶ km for `decimal` and `PreciseNumber`. The published vectors were computed in
+   `double`, so no other type can agree with them more closely than their own rounding, and 10⁻⁶ km
+   is that floor with margin. `float` will not meet any tolerance and is not expected to — recording
+   *where* it fails is a result. In every type, a case whose published output stops early must be
+   refused at the next step.
 3. **Frame transforms against IERS test vectors.**
 4. **SP3 interpolation by held-out epochs.**
 5. **`Δ_arith(PreciseNumber) ≡ 0`** — the trivial invariant that proves the comparison harness
@@ -463,7 +467,7 @@ Non-negotiable gates, in order:
 | **M0** | Repository skeleton, this specification, CI | — |
 | **M1** | `Sgp4<T>` generic, `double` path | **Vallado suite passes** |
 | **M2** | CelesTrak client + cache; TLE-vs-later-TLE divergence; catalogue and globe panels | End-to-end divergence number for the ISS |
-| **M3** | `PreciseStorageMath`, `PreciseNumber` path, high-precision π | **Performance gate (G4)**; Vallado suite passes in `PreciseNumber` |
+| **M3** | `PreciseStorageMath`, `PreciseNumber` path, high-precision π | **Performance gate (G4)**; Vallado suite passes in `PreciseNumber` at the gate-2 tolerance of 10⁻⁶ km (10⁻⁸ km is unreachable by design against vectors computed in `double`) |
 | **M4** | Frames (TEME↔ITRF↔GCRF), EOP; CDDIS/ILRS SP3 | LAGEOS-1 against SLR truth |
 | **M5** | Storage comparison panel; Monte-Carlo Δ_data; element inspector | **The decomposition works — the headline result** |
 | **M6** | Cowell integrator, force model; time inspector | JD staircase and long-arc round-off demos |
