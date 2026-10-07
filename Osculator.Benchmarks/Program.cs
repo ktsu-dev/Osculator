@@ -10,9 +10,22 @@ using BenchmarkDotNet.Running;
 internal static class Program
 {
 	/// <summary>
-	/// Runs the benchmark switcher over every benchmark in the assembly.
+	/// Runs the benchmark switcher over every benchmark in the assembly, or the M3 budget gate when
+	/// asked for it.
 	/// </summary>
-	/// <param name="args">Arguments forwarded to BenchmarkDotNet, such as <c>--filter</c>.</param>
-	private static void Main(string[] args) =>
+	/// <param name="args">
+	/// <c>--budget</c> alone to run <see cref="PropagationBudget"/>; anything else is forwarded to
+	/// BenchmarkDotNet, such as <c>--filter</c>.
+	/// </param>
+	/// <returns>The process exit code: non-zero when the budget gate fails.</returns>
+	private static int Main(string[] args)
+	{
+		if (args is [PropagationBudget.Switch])
+		{
+			return PropagationBudget.Run();
+		}
+
 		BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+		return 0;
+	}
 }

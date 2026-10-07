@@ -76,10 +76,29 @@ public static class Sgp4<T>
 		T ecco = sat.Eccentricity;
 		T inclo = sat.Inclination;
 
-		// Recover the unperturbed ("un-Kozai'd") mean motion. The element set carries the Kozai
-		// mean motion, and feeding that straight in is a classic error worth a few kilometres.
 		T eccsq = ecco * ecco;
 		T omeosq = T.One - eccsq;
+
+		// The model's domain is checked before anything below uses it, not after. An eccentricity of
+		// one divides by zero two lines down, beyond one takes the root of a negative, and a mean
+		// motion of zero divides by zero in the semi-major axis. In double those become NaN, which
+		// every later comparison lets through as a success; in decimal and PreciseNumber they throw.
+		// Checking first makes all four storage types refuse the same element set the same way.
+		// The inverted comparisons also refuse a NaN input, which no ordinary comparison would.
+		if (!(omeosq > T.Zero))
+		{
+			sat.InitializationError = Sgp4Error.EccentricityOutOfRange;
+			return sat;
+		}
+
+		if (!(sat.MeanMotionKozai > T.Zero))
+		{
+			sat.InitializationError = Sgp4Error.MeanMotionNotPositive;
+			return sat;
+		}
+
+		// Recover the unperturbed ("un-Kozai'd") mean motion. The element set carries the Kozai
+		// mean motion, and feeding that straight in is a classic error worth a few kilometres.
 		T rteosq = math.Sqrt(omeosq);
 		T cosio = math.Cos(inclo);
 		T cosio2 = cosio * cosio;
@@ -207,8 +226,21 @@ public static class Sgp4<T>
 			// is not among them — so the simplified path is forced on whatever the perigee height is.
 			sat.IsSimplified = true;
 
+			// Sidereal time at epoch is an input shared by every storage type, like the element set's
+			// own double fields, not part of each type's arithmetic. It is evaluated once, in double,
+			// exactly as the published model evaluates it, and only the finished angle is converted.
+			//
+			// Both alternatives were measured and both are wrong. Evaluating it in T quantized the
+			// epoch before the propagator ran: near JD 2.46e6 consecutive floats are six hours apart,
+			// and Gsto does not cancel out of the resonance terms, so that one evaluation put up to
+			// 20 km on float's half-day-resonant cases — and, in the 30-digit reference, it was most
+			// of what double's median arithmetic error measured. Evaluating it from the two-part date
+			// instead, which is the more accurate number, moved double itself off the published
+			// vectors by up to 3.6e-8 km: the vectors carry the single-date rounding of this exact
+			// polynomial, so matching them means computing it the same way.
 			double epochDays = elements.EpochJulianDate.DaysSinceSgp4DayZero;
-			sat.Gsto = math.ToWorkingPrecision(DeepSpace<T>.GreenwichSiderealTime(N(epochDays + JulianDate.Sgp4DayZero), math));
+			double gsto = DeepSpace<double>.GreenwichSiderealTime(epochDays + JulianDate.Sgp4DayZero, DoubleStorageMath.Instance);
+			sat.Gsto = math.ToWorkingPrecision(N(gsto));
 
 			DeepSpaceCommon<T> common = DeepSpace<T>.InitializeCommon(sat, N(epochDays), math);
 			DeepSpace<T>.InitializeResonance(sat, common, sat.ArgpDot + sat.NodeDot, math);
