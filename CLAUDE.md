@@ -134,9 +134,9 @@ residual cannot reach `Geodetic` without going all the way, because that overloa
 `ItrfState<T>`. Polar motion is about 12 m at the surface for present-day pole coordinates, not the
 9 m first estimated here.
 
-There are no IERS test vectors here, so the transform is checked against physics instead — which
-for this one is stronger than it sounds. A geostationary satellite has to stay over one longitude,
-and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
+Gate 3 now has a published reference (see the gate list below). The physics checks stay, and
+for this transform they are stronger than they sound. A geostationary satellite has to stay over
+one longitude, and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
 rotating-frame velocity while that still holds. Mutation-checked, not merely watched to pass:
 
 | mutation | what the test read |
@@ -418,7 +418,17 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
    `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
    without saying so, is the result.
-3. Frame transforms against IERS test vectors.
+3. Frame transforms against a published reference vector. **Passing.** `FrameCorrectnessTests`
+   runs the worked example in Appendix C of Vallado et al. 2006 (AIAA 2006-6753 Rev 2) through
+   TEME → PEF and PEF → ITRF separately, so a failure says whether rotation or polar motion broke.
+   Positions agree to 5.7e-8 km against the paper's 1e-7 km last digit; velocity to 1.0e-8 km/s,
+   which is the paper's length-of-day correction to ω, not carried here. **The paper's own instant
+   is 14.7 µs off the one it names**: its program forms UT1 as one `double`, which is the
+   Julian-date staircase of trap 4. From the exact two-part instant the PEF vector lands 8.5 mm
+   away, and the test asserts that whole gap is that rotation. So `SiderealAngle` is matched to
+   the paper by feeding it the paper's rounded instant, not by rounding its own: it evaluates
+   GMST from the two parts without ever summing them, rising at every microsecond and within
+   8.2e-14 rad of a 50-digit evaluation, where the single-`double` sum was off by up to 1.4e-9 rad.
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.

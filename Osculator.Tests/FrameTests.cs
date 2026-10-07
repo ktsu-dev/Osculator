@@ -14,14 +14,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// There are no IERS test vectors in this repository, so the transform is not checked against a
-/// published number. It is checked against physics instead, which for this particular transform is
-/// stronger than it sounds: a geostationary satellite has to stay over one longitude, and there is
+/// These check the transform against physics, which for this particular transform is stronger
+/// than it sounds: a geostationary satellite has to stay over one longitude, and there is
 /// essentially no way to get the rotation sense, the sidereal rate or the rotating-frame velocity
 /// wrong and still have that come out. A sign error sends it round the planet once a day.
 /// </para>
 /// <para>
-/// Gate 3 in the spec — frame transforms against IERS vectors — is what these do not replace.
+/// Gate 3 in the spec, the check against a published reference vector, is
+/// <see cref="FrameCorrectnessTests"/>.
 /// </para>
 /// </remarks>
 [TestClass]
