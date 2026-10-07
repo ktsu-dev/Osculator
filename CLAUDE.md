@@ -190,6 +190,32 @@ The rate components use **SGP4's stated velocity** for both states, decided rath
 the choice. Three snapshots is what was available to commit — CelesTrak serves only the current set,
 so a longer history has to be accumulated by `SnapshotStore` over time, or seeded from Space-Track.
 
+**M5's decomposition runs end to end.** `Decomposition<T>.Compute(elements, truth, reference)`
+returns Δ_model, Δ_data and Δ_arith for `float`, `double`, `decimal` and the reference itself, all in
+the reference's RIC frame and accumulated in the reference arithmetic. `DecompositionTests` runs it on
+the ISS week above, in 30-digit `PreciseNumber`:
+
+| term | 6.97 days |
+|---|---|
+| Δ_model | **10.915 km** (the M2 divergence, through the same routine) |
+| Δ_data, Monte Carlo RMS over 256 draws | **0.0098 km** |
+| Δ_arith(`float`) | 0.020 km |
+| Δ_arith(`double`) | **1.7e-9 km** |
+| Δ_arith(`decimal`) | 6.4e-7 km |
+| Δ_arith(`PreciseNumber`) | **0, every digit**, via the same code path as the others |
+
+Three things to take from it, all asserted:
+
+1. **The terms separate cleanly.** Δ_model is a thousand times Δ_data, and Δ_data is six and a half
+   orders above `double`'s arithmetic.
+2. **`float`'s round-off is twice the whole data term** on this arc: seven digits lose more than the
+   element set's last decimal place is worth.
+3. **The Monte Carlo agrees with `DataTerm`**, which measures the same band field by field: a uniform
+   rounding has an RMS of the half step over √3, and a converged ensemble reads 9.866e-3 km against
+   the 9.844e-3 that predicts. The ensemble also perturbs the epoch, which `DataTerm` does not, at
+   3.3 m of along-track at half a step. Steps are the TLE's, so for an OMM-ingested set (trap 6) the
+   figure is an upper bound.
+
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
 
