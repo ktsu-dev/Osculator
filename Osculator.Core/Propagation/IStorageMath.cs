@@ -92,4 +92,18 @@ public interface IStorageMath<T>
 	/// <param name="exponent">The exponent.</param>
 	/// <returns>The result.</returns>
 	public T Pow(T value, T exponent);
+
+	/// <summary>Divides one value by another at the working precision.</summary>
+	/// <param name="dividend">The value to divide.</param>
+	/// <param name="divisor">The value to divide by.</param>
+	/// <returns>The quotient.</returns>
+	/// <remarks>
+	/// The operator is the right answer for every fixed-width type, which rounds into its own width,
+	/// so that is the default. An arbitrary-precision type cannot rely on it: <c>PreciseNumber</c>'s
+	/// operator rounds a repeating quotient of two short operands — <c>2 / 3</c>, a literal over the
+	/// Earth's radius — to fifty digits whatever working precision was chosen, which puts a floor
+	/// under every run above fifty. A quotient whose operands are both literals is where that bites,
+	/// so those are the divisions to route through here.
+	/// </remarks>
+	public T Divide(T dividend, T divisor) => dividend / divisor;
 }

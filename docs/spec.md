@@ -57,8 +57,10 @@ headline demonstrations.
 
 **1. The Julian Date resolution wall.** The standard time variable in orbital mechanics is
 the Julian Date, currently ≈ 2,461,000. A `double` holds ~15.95 significant decimal digits,
-so one ulp of JD is about `2.46e6 × 2.22e-16 ≈ 5.5e-10` days ≈ **48 microseconds**. At LEO
-orbital speed (7.7 km/s) that is 0.37 mm of along-track position — irrelevant for SGP4, and
+and JD lies between 2²¹ and 2²², so one ulp of JD is exactly `2⁻³¹ ≈ 4.66e-10` days ≈ **40.2
+microseconds**. (The often-quoted 48 µs is `2.46e6 × 2.22e-16`, machine epsilon times the date, which
+is a bound and overstates the spacing by JD / 2²¹.) At LEO orbital speed (7.7 km/s) that is 0.31 m of
+along-track position — irrelevant for SGP4, and
 *not* irrelevant when comparing against centimetre-accurate laser-ranging orbits. The entire
 astrodynamics community works around this with the two-part Julian Date (integer day plus
 fraction, carried as two `double`s), a hack that exists solely because one `double` cannot
@@ -66,7 +68,7 @@ hold the number.
 
 In `PreciseNumber` the Julian Date is simply exact and the hack is unnecessary. The app
 demonstrates the wall directly: sweep requested time continuously and plot propagated
-along-track position. In `double`-JD mode the curve is a **staircase** with 48 µs treads. In
+along-track position. In `double`-JD mode the curve is a **staircase** with 40.2 µs treads and 31 cm risers. In
 `PreciseNumber` it is a line. This is the single clearest, most physically real
 demonstration in the application, and it is a genuine working practice, not a contrivance.
 

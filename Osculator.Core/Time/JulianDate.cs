@@ -12,9 +12,9 @@ using System;
 /// <remarks>
 /// <para>
 /// Two parts rather than one because a single <see cref="double"/> cannot hold a Julian date at
-/// useful resolution: the value is around 2.46 million, so one unit in the last place is about
-/// 48 microseconds. Splitting it keeps the fraction's full precision, which is what carries the
-/// sub-second part of an epoch.
+/// useful resolution: the value is around 2.46 million, between 2^21 and 2^22, so one unit in the
+/// last place is 2^-31 of a day, 40.2 microseconds. Splitting it keeps the fraction's full
+/// precision, which is what carries the sub-second part of an epoch.
 /// </para>
 /// <para>
 /// The arithmetic here is the published algorithm's, deliberately — including its leap-year rule of
