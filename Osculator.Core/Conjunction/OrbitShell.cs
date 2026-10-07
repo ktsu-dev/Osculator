@@ -52,7 +52,9 @@ public readonly record struct OrbitShell(double PerigeeRadiusKm, double ApogeeRa
 
 		double meanMotionRadiansPerMinute = elements.MeanMotion * 2.0 * Math.PI / MinutesPerDay;
 
-		if (!(meanMotionRadiansPerMinute > 0.0))
+		// NaN is spelled out because "<= 0" alone lets it through, and a NaN shell would compare
+		// false against every other shell and quietly reject every pair it is in.
+		if (double.IsNaN(meanMotionRadiansPerMinute) || meanMotionRadiansPerMinute <= 0.0)
 		{
 			return new OrbitShell(0.0, double.PositiveInfinity);
 		}
