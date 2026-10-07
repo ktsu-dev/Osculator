@@ -103,7 +103,7 @@ public sealed class JulianDateStaircaseTests
 		{
 			double rise = sweep[i].AlongTrackMeters - sweep[i - 1].AlongTrackMeters;
 
-			if (sweep[i].PropagatedSeconds == sweep[i - 1].PropagatedSeconds)
+			if (sweep[i].PropagatedSeconds.Equals(sweep[i - 1].PropagatedSeconds))
 			{
 				// The same instant, so bit-for-bit the same state.
 				Assert.AreEqual(0.0, rise, 0.0, $"Sample {i} moved without its instant moving.");
@@ -171,7 +171,7 @@ public sealed class JulianDateStaircaseTests
 		// day. Every request in the sweep — every request within three hours of it — is the epoch.
 		IReadOnlyList<JulianDateStaircaseSample> sweep = JulianDateStaircase.Sweep(Iss, StartSeconds, SpanSeconds, Samples, JulianDateMode.SingleValue, FloatStorageMath.Instance);
 
-		Assert.IsTrue(sweep.All(s => s.PropagatedSeconds == 0.0), "Every request is expected to collapse onto the epoch.");
+		Assert.IsTrue(sweep.All(s => s.PropagatedSeconds.Equals(0.0)), "Every request is expected to collapse onto the epoch.");
 	}
 
 	[TestMethod]
