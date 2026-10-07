@@ -259,7 +259,7 @@ public static class TleWriter
 		long mantissa = 0;
 		int exponent = 0;
 
-		if (magnitude != 0.0)
+		if (magnitude > 0.0)
 		{
 			// Normalize to 0.1 <= m < 1. The logarithm can land a hair either side of an integer for
 			// an exact power of ten, which shows up as a mantissa of 100000 and is corrected below.

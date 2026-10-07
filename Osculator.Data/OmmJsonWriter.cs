@@ -107,7 +107,7 @@ public static class OmmJsonWriter
 			throw new ArgumentOutOfRangeException(nameof(value), value, "JSON cannot write a number that is not finite.");
 		}
 
-		if (value == 0.0)
+		if (value is 0.0)
 		{
 			return "0";
 		}
