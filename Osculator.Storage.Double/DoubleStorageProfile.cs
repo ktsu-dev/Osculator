@@ -2,6 +2,9 @@
 
 namespace ktsu.Osculator.Storage;
 
+using System;
+using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Storage;
 
 /// <summary>
@@ -12,8 +15,12 @@ using ktsu.Osculator.Core.Storage;
 /// library uses throughout. One ulp at an orbital radius is around a nanometre, which is far below
 /// the model error — proving that, rather than assuming it, is the point of the comparison.
 /// </remarks>
-public sealed class DoubleStorageProfile : IStorageProfile
+public sealed class DoubleStorageProfile : IPropagatorHost
 {
+	// The storage type is inferred from the math instance and never written here.
+	private readonly Func<ElementSet, double, PropagatedState> propagate =
+		Sgp4PropagatorHost.Create(DoubleStorageMath.Instance).Propagate;
+
 	/// <inheritdoc />
 	public string StorageName => "double";
 
@@ -23,6 +30,10 @@ public sealed class DoubleStorageProfile : IStorageProfile
 	/// <inheritdoc />
 	public double SmallestDistinguishableStepMeters(double magnitudeMeters) =>
 		double.CreateTruncating(StorageProbe.SmallestDistinguishableStep(double.CreateTruncating(magnitudeMeters)));
+
+	/// <inheritdoc />
+	public PropagatedState Propagate(ElementSet elements, double minutesSinceEpoch) =>
+		propagate(elements, minutesSinceEpoch);
 
 	/// <summary>
 	/// Gets a nominal low Earth orbital radius, built through the alias package's quantity types.

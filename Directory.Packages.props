@@ -36,6 +36,8 @@
          ktsu.ImGui.App 3.37.0 resolves. -->
     <PackageVersion Include="ktsu.ImGui.App.Testing" Version="3.37.0" />
     <PackageVersion Include="Hexa.NET.ImGui.Widgets" Version="1.2.18" />
+    <!-- The version ktsu.ImGui.Widgets resolves; the catalogue panel ranks with it directly. -->
+    <PackageVersion Include="ktsu.TextFilter" Version="1.5.45" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
