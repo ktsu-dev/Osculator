@@ -71,15 +71,16 @@ were **mutation-checked**: inverting the freshness comparison fails three of the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
-every usable case in the verification set, perturbs each element field by half its written step,
-propagates, and combines the eight contributions in quadrature:
+every usable case in the verification set, perturbs each element field by half the step its
+recorded format writes it to, propagates to the same instant, and combines the nine contributions
+in quadrature:
 
 | | 1 day | 3 days | 7 days |
 |---|---|---|---|
-| median over 27 cases | **0.056 km** | — | **0.066 km** |
-| range | 0.010 – 0.388 km | 0.010 – 4.49 km | 0.013 – 4.58 km |
+| median over 27 cases | **0.056 km** | 0.059 km | **0.066 km** |
+| range | 0.011 – 0.388 km | 0.011 – 4.49 km | 0.014 – 4.58 km |
 
-Four things to take from that, all of which the tests assert:
+Five things to take from that, all of which the tests assert:
 
 1. **It is around 0.06 km, not the 0.3–3 km the spec projects.** The projection was out by a factor
    of five to fifty. Note carefully what is and is not measured here: this is the band of element
@@ -99,6 +100,18 @@ Four things to take from that, all of which the tests assert:
    `Sgp4.cs` never reads either field; all of SGP4's drag is B*. They are in every TLE because SGP,
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
+5. **The epoch is in the table now, and it moves the median by 0.01 m.** It was missing while
+   `MeanMotionDot` was present. Half its step is 432 µs, so it contributes the orbital speed times
+   432 µs: 0.5 to 3.8 m at a day, median 1.3 m, never leading and at best fourth. In quadrature that
+   is invisible at three figures — the 1-day median goes 0.05636 → 0.05637 km — and its largest
+   share of any case's total is 31%, on the quietest LEO sets, where it adds about 5%.
+
+**Each element set records the format it was read from**, and the steps follow it
+(`ElementFieldQuantization.For`). OMM carries eccentricity to eight decimals and B* to eight
+significant digits; the epoch is the same in both, because the JSON's microsecond epoch is the
+text's eighth decimal of a day re-rendered — both committed ISS epochs are exact multiples of
+1e-8 day. The table above is the verification set, which is all TLE. An element set built by hand
+defaults to `Tle`, the coarser, so a forgotten format overstates Δ_data rather than understating it.
 
 **The frame layer reaches the ITRF now, and gate 3's sign conventions are checked rather than
 recalled.** `Osculator.Data/Iers/` reads the IERS `finals2000A.all.csv` series — open, no account,
@@ -332,7 +345,8 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    digit and the drag term gains three (five significant digits in the text, eight in the JSON).
    Mean motion and its first derivative are identical. So Δ_data depends on which representation was
    ingested, and mixing the two compares element sets of different precision. `TleParserTests`
-   pins this with the same ISS element set committed in both forms.
+   pins this with the same ISS element set committed in both forms, and `ElementSet.Format` records
+   which one each set came from so the data term can use the right steps.
 7. **SGP4's velocity unit is not its position unit.** Position converts by the Earth's radius;
    velocity by `radius * xke / 60`. Dropping `xke` leaves position perfect and velocity wrong by a
    factor of 13.45 — which is precisely the defect the verification suite caught during M1, and the
