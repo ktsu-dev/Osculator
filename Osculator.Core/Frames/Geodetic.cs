@@ -42,10 +42,13 @@ public readonly record struct GeodeticPosition<T>(T LatitudeRadians, T Longitude
 /// type system now refuses it.
 /// </para>
 /// <para>
-/// The latitude solve is the standard fixed-point iteration rather than a closed form. It converges
-/// in a handful of steps for anything in orbit, and <see cref="MaximumIterations"/> is a ceiling
-/// that throws rather than a budget that returns whatever it reached — an unconverged latitude is
-/// a wrong answer, not an imprecise one.
+/// The latitude solve is Newton's method rather than the textbook fixed-point iteration. The
+/// fixed point gains about 2.5 digits a step, so at a working precision of 80 digits it needed
+/// more steps than the ceiling allowed and threw on a latitude that was converging, just slowly —
+/// at exactly the precisions used to show the reference computation has converged. Newton doubles
+/// its digits each step, so a tenfold rise in precision costs about three more steps.
+/// <see cref="MaximumIterations"/> is still a ceiling that throws rather than a budget that
+/// returns whatever it reached — an unconverged latitude is a wrong answer, not an imprecise one.
 /// </para>
 /// </remarks>
 public static class Geodetic<T>
@@ -61,7 +64,19 @@ public static class Geodetic<T>
 	public static T EccentricitySquared { get; } = Flattening * (T.CreateChecked(2) - Flattening);
 
 	/// <summary>How many latitude iterations are allowed before the answer is called wrong.</summary>
+	/// <remarks>
+	/// Newton's method doubles the correct digits each step from a seed good to about three, so
+	/// this is enough for a working precision of hundreds of millions of digits. It is a ceiling
+	/// that throws, not a budget.
+	/// </remarks>
 	public const int MaximumIterations = 30;
+
+	/// <summary>
+	/// Below this size a step that fails to shrink is rounding noise rather than divergence: about
+	/// 0.2 arcseconds, far above any storage type's resolution of a latitude and far below the
+	/// seed's 0.19° error.
+	/// </summary>
+	private static T StallThresholdRadians { get; } = T.CreateChecked(1e-6);
 
 	/// <summary>
 	/// Converts an Earth-fixed position to geodetic latitude, longitude and altitude.
@@ -80,25 +95,35 @@ public static class Geodetic<T>
 		// Seeded with the geocentric latitude, which is the answer at the equator and at the poles
 		// and wrong by up to 0.19 degrees in between.
 		T latitude = math.Atan2(state.Z, equatorialDistance);
-		T settled = T.Zero;
+		T previousStep = T.Zero;
 		bool converged = false;
 
 		for (int i = 0; i < MaximumIterations; i++)
 		{
-			T sin = math.Sin(latitude);
-			T radiusOfCurvature = SemiMajorAxisKm / math.Sqrt(T.One - (EccentricitySquared * sin * sin));
-			T next = math.Atan2(state.Z + (radiusOfCurvature * EccentricitySquared * sin), equatorialDistance);
+			T step = math.ToWorkingPrecision(NewtonStep(equatorialDistance, state.Z, latitude, math));
+			T next = math.ToWorkingPrecision(latitude - step);
 
 			if (next == latitude)
 			{
-				settled = radiusOfCurvature;
 				converged = true;
-				latitude = next;
 				break;
 			}
 
+			// Newton's step shrinks quadratically until it reaches the storage type's rounding, and
+			// then it stops shrinking and wanders. A step no smaller than the last one, once both are
+			// already tiny, is that floor rather than a divergence, and the latitude before it is
+			// the answer. Requiring next == latitude instead never terminates for a type whose last
+			// digit flips back and forth.
+			T size = T.Abs(step);
+
+			if (i > 0 && size >= previousStep && size < StallThresholdRadians)
+			{
+				converged = true;
+				break;
+			}
+
+			previousStep = size;
 			latitude = next;
-			settled = radiusOfCurvature;
 		}
 
 		if (!converged)
@@ -107,7 +132,10 @@ public static class Geodetic<T>
 				$"The geodetic latitude did not settle in {MaximumIterations} iterations.");
 		}
 
-		return new GeodeticPosition<T>(latitude, longitude, Altitude(state, equatorialDistance, latitude, settled, math));
+		T sinLatitude = math.Sin(latitude);
+		T radiusOfCurvature = SemiMajorAxisKm / math.Sqrt(T.One - (EccentricitySquared * sinLatitude * sinLatitude));
+
+		return new GeodeticPosition<T>(latitude, longitude, Altitude(state, equatorialDistance, latitude, radiusOfCurvature, math));
 	}
 
 	/// <summary>
@@ -138,6 +166,37 @@ public static class Geodetic<T>
 			T.Zero,
 			T.Zero,
 			T.Zero);
+	}
+
+	/// <summary>
+	/// One Newton step on geodetic latitude.
+	/// </summary>
+	/// <param name="p">Distance from the spin axis, in kilometres.</param>
+	/// <param name="z">Height above the equatorial plane, in kilometres.</param>
+	/// <param name="latitude">The current estimate.</param>
+	/// <param name="math">The transcendental functions.</param>
+	/// <returns>The amount to subtract from the estimate.</returns>
+	/// <remarks>
+	/// A point at geodetic latitude φ and height h sits at <c>p = (N + h)·cos φ</c>,
+	/// <c>z = (N(1 − e²) + h)·sin φ</c>. Eliminating h leaves
+	/// <c>f(φ) = p·sin φ − z·cos φ − e²·N·sin φ·cos φ = 0</c>, with
+	/// <c>N′ = N·e²·sin φ·cos φ / (1 − e²·sin²φ)</c>. The derivative is written out rather
+	/// than differenced, because a difference quotient would cap the convergence at half the
+	/// working precision — the problem this replaced, in a different form.
+	/// </remarks>
+	private static T NewtonStep(T p, T z, T latitude, IStorageMath<T> math)
+	{
+		T sin = math.Sin(latitude);
+		T cos = math.Cos(latitude);
+		T sinCos = sin * cos;
+		T weight = T.One - (EccentricitySquared * sin * sin);
+		T radiusOfCurvature = SemiMajorAxisKm / math.Sqrt(weight);
+
+		T value = (p * sin) - (z * cos) - (EccentricitySquared * radiusOfCurvature * sinCos);
+		T slope = (p * cos) + (z * sin)
+			- (EccentricitySquared * radiusOfCurvature * ((cos * cos) - (sin * sin) + (EccentricitySquared * sinCos * sinCos / weight)));
+
+		return value / slope;
 	}
 
 	/// <summary>

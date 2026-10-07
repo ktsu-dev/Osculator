@@ -70,8 +70,9 @@ public sealed class EarthOrientationTable
 		{
 			string[] fields = lines[i].Split(';');
 
-			// Columns, 1-based as the header numbers them: 1 MJD, 5 pole type, 6 x, 8 y,
-			// 14 UT1 type, 15 UT1-UTC. A short line is a truncated download, not a data row.
+			// Columns, 1-based as the header numbers them: 1 MJD, 5 pole type, 6 x, 7 sigma x, 8 y,
+			// 9 sigma y, 14 UT1 type, 15 UT1-UTC, 16 sigma UT1-UTC. A short line is a truncated
+			// download, not a data row.
 			if (fields.Length < 16)
 			{
 				continue;
@@ -90,7 +91,10 @@ public sealed class EarthOrientationTable
 				poleX,
 				poleY,
 				ut1MinusUtc,
-				fields[4].Trim() != "final" || fields[13].Trim() != "final"));
+				fields[4].Trim() != "final" || fields[13].Trim() != "final",
+				SigmaOrUnknown(fields[6]),
+				SigmaOrUnknown(fields[8]),
+				SigmaOrUnknown(fields[15])));
 		}
 
 		return parsed.Count == 0
@@ -159,8 +163,50 @@ public sealed class EarthOrientationTable
 
 			// Either neighbour being a forecast makes the answer one. A value blended from a
 			// measurement and a forecast is not a measurement.
-			before.IsPrediction || next.IsPrediction);
+			before.IsPrediction || next.IsPrediction,
+			SigmaBetween(before.PoleXSigmaArcseconds, next.PoleXSigmaArcseconds, t),
+			SigmaBetween(before.PoleYSigmaArcseconds, next.PoleYSigmaArcseconds, t),
+			SigmaBetween(before.Ut1MinusUtcSigmaSeconds, next.Ut1MinusUtcSigmaSeconds, t));
 	}
+
+	/// <summary>
+	/// The uncertainty of a value interpolated between two rows.
+	/// </summary>
+	/// <param name="before">The earlier row's sigma.</param>
+	/// <param name="next">The later row's sigma.</param>
+	/// <param name="t">How far between them, 0 to 1.</param>
+	/// <returns>The sigma to report.</returns>
+	/// <remarks>
+	/// <para>
+	/// <strong>The larger neighbour, not a blend.</strong> A value interpolated from two rows is
+	/// no better known than the worse of them, and a linear blend would claim it is: midway between
+	/// a final row and a forecast four times as uncertain it would report two and a half times the
+	/// final sigma for a value that is half forecast. The same reasoning makes
+	/// <see cref="EarthOrientation.IsPrediction"/> true when either neighbour is a forecast.
+	/// </para>
+	/// <para>
+	/// On a row exactly (<c>t = 1</c>) the row's own sigma is reported, because the row's own
+	/// value is what is reported and nothing has been blended. A neighbour with no stated sigma
+	/// makes the answer unknown too: <see cref="Math.Max(double, double)"/> carries the NaN
+	/// through, which is what it should do.
+	/// </para>
+	/// </remarks>
+	private static double SigmaBetween(double before, double next, double t) =>
+		t < 1.0 ? Math.Max(before, next) : next;
+
+	/// <summary>
+	/// Reads a sigma column, where an empty field means "not stated" rather than zero.
+	/// </summary>
+	/// <param name="field">The field.</param>
+	/// <returns>The sigma, or <see cref="double.NaN"/> when the field is empty or unreadable.</returns>
+	/// <remarks>
+	/// The row is kept either way: a value without its uncertainty is still the value, and the
+	/// frame transform needs it. What it must not become is a sigma of zero, which is the empty-row
+	/// trap again in a smaller font — a legal-looking number claiming the orientation is known
+	/// exactly.
+	/// </remarks>
+	private static double SigmaOrUnknown(string field) =>
+		TryParse(field, out double sigma) ? sigma : double.NaN;
 
 	/// <summary>Binary search for the first row at or after a Modified Julian Date.</summary>
 	/// <param name="mjd">The date.</param>
@@ -195,9 +241,19 @@ public sealed class EarthOrientationTable
 		double PoleXArcseconds,
 		double PoleYArcseconds,
 		double Ut1MinusUtcSeconds,
-		bool IsPrediction)
+		bool IsPrediction,
+		double PoleXSigmaArcseconds,
+		double PoleYSigmaArcseconds,
+		double Ut1MinusUtcSigmaSeconds)
 	{
 		public EarthOrientation ToOrientation() =>
-			new(PoleXArcseconds, PoleYArcseconds, Ut1MinusUtcSeconds, IsPrediction);
+			new(
+				PoleXArcseconds,
+				PoleYArcseconds,
+				Ut1MinusUtcSeconds,
+				IsPrediction,
+				PoleXSigmaArcseconds,
+				PoleYSigmaArcseconds,
+				Ut1MinusUtcSigmaSeconds);
 	}
 }
