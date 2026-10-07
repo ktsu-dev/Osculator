@@ -179,6 +179,36 @@ It costs about twelve seconds, because it sweeps the whole verification set twic
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
 
+**Demonstration 4 is measured: round-off accumulated over a thirty-day integrated arc.**
+`Cowell<T>` integrates under any `IForceModel<T>` with the Prince–Dormand RK8(7)13M pair
+(`DormandPrince87<T>`), and `CowellRoundOffTests` runs a two-body LEO arc in fixed 120-second steps
+in all four storage types against a thirty-digit run of the same integration:
+
+| day | `float` | `double` | `decimal` |
+|---|---|---|---|
+| 1 | 10.3 km | 3.3e-9 km | 1.2e-18 km |
+| 30 | **8160 km** | **2.4e-6 km** | 2.4e-17 km |
+
+The reference is converged — 30 and 40 digits differ by 6.0e-23 km after a day. Three things to
+take from it, all asserted:
+
+1. **`double`'s month is 2.4 mm, which is what the spec projected, but not for the spec's reason.**
+   The spec had round-off random-walking as √t. It grows as **t^1.94**: a rounding error in the
+   state is an error in the orbit's energy and so its period, and the along-track error from a
+   period error grows as the square of the arc.
+2. **`float` is worse than "confusing".** Projected at 1.3 km for the month; measured at 10 km
+   after one day and most of an orbit after thirty, with nothing reported.
+3. **`decimal` keeps all its digits here**, unlike in SGP4: two-body quantities sit between 1e-3 and
+   1e4, above the crossover of domain trap 10.
+
+Holding everything but the arithmetic fixed takes two choices worth knowing about. The step sequence
+is fixed, because two adaptive runs pick different steps and the difference would include truncation
+error. And μ is 398600.4375 rather than EGM96's 398600.4418, because only the former is exact in
+`float` — the published value would hand the float run a different orbit, worth hundreds of metres
+a month, and the table would blame it on the arithmetic. The pair's coefficient table was verified
+independently of the code: its error estimate falls as h⁸ (measured 7.92, 7.98), and changing one
+digit of one coefficient drops it to 5.5.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
