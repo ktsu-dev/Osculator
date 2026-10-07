@@ -155,6 +155,14 @@ axis order — a cross product and its negation have identical dimensions — so
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
+**The globe panel is in.** `Osculator.App/Globe/` paints the Earth on the CPU (Natural Earth 1:110m
+land, public domain, compiled in; night side from a display-only solar position) and the panel
+uploads it with `CreateTexture`/`UpdateTexture` under an `ImageCanvas`. Tracks and objects are drawn
+over it as vectors, in `double` with `EarthOrientation.Ignored` — a picture, never a residual. Dots
+are coloured by Δ_arith (`float` or `decimal` against `double`) on a log scale. `GlobeTests` checks
+it against physics rather than snapshots: the ISS track peaks between 51.6° and 52.0° geodetic, and
+each ascending node falls 23.6° ± 0.3° west of the last.
+
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
 

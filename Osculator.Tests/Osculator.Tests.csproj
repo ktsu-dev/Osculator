@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Osculator.App\Osculator.App.csproj" />
     <ProjectReference Include="..\Osculator.Core\Osculator.Core.csproj" />
     <ProjectReference Include="..\Osculator.Data\Osculator.Data.csproj" />
     <ProjectReference Include="..\Osculator.Storage.Double\Osculator.Storage.Double.csproj" />
