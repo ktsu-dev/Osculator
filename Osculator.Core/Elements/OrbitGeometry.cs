@@ -78,7 +78,7 @@ public readonly record struct OrbitGeometry(
 	/// </returns>
 	public static OrbitGeometry Of(double meanMotionRevPerDay, double eccentricity)
 	{
-		if (!(meanMotionRevPerDay > 0.0) || double.IsInfinity(meanMotionRevPerDay) || !(eccentricity >= 0.0) || !(eccentricity < 1.0))
+		if (!double.IsFinite(meanMotionRevPerDay) || meanMotionRevPerDay <= 0.0 || double.IsNaN(eccentricity) || eccentricity < 0.0 || eccentricity >= 1.0)
 		{
 			return new(double.NaN, double.NaN, double.NaN, double.NaN, OrbitClass.Unclassified);
 		}
