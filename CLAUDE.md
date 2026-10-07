@@ -27,28 +27,41 @@ five seconds, and reports:
 | | digits | worst vs the published vectors | vs the 30-digit reference |
 |---|---|---|---|
 | `float` | 7 | **55.06 km**, and **0 refusals in 666 rows** | — |
-| `double` | 16 | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **1.6e-10 km**, worst 7.0e-8 km |
-| `decimal` | 28 | 4.2e-7 km | median **5.9e-11 km**, worst 4.0e-7 km |
-| `PreciseNumber` | 30 | **7.3e-8 km** | — |
+| `double` | 16 | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **4.7e-11 km**, worst 3.1e-8 km |
+| `decimal` | 28 | 4.2e-7 km | median **4.8e-11 km**, worst 4.0e-7 km |
+| `PreciseNumber` | 30 | **3.3e-8 km** | — |
+
+**The deep-space epoch sidereal time is a shared input, not part of Δ_arith** (#65). It is evaluated
+once in `double`, exactly as the published model evaluates it, and only the finished angle is
+converted to the storage type, as the element set's own `double` fields are. Both other choices were
+measured and both are wrong. Evaluating it in `T` quantized the epoch before the propagator ran —
+consecutive floats near JD 2.46e6 are six hours apart, and the angle does not cancel out of the
+resonance terms — which put up to 20.5 km on `float`'s half-day-resonant cases (0.09 km now) and was
+70% of `double`'s median against the 30-digit reference (1.6e-10 km before, 4.7e-11 now). Evaluating
+it from the two-part date, the more accurate number, moved `double` itself off the published vectors
+by up to 3.6e-8 km on object 8195: the vectors carry the single-date rounding of that polynomial.
+`float`'s 55.06 km headline is on a non-resonant case and did not move.
 
 Four things to take from that table, all of which the tests assert:
 
-1. **`double`'s arithmetic error is around eight and a half orders of magnitude below the data
-   term.** A median of 1.6e-10 km is a sixth of a millimetre, against a measured **0.056 km** of
-   element-set quantization. This is the repository's central claim and both sides of it are now
-   numbers. It used to read "around ten orders" against "0.3 to 3 km of element-set quantization";
-   that was a projection, the quantization has since been measured at a twentieth of it, and the
-   claim survives comfortably either way. See below.
+1. **`double`'s arithmetic error is around nine orders of magnitude below the data term.** A median
+   of 4.7e-11 km is a twentieth of a millimetre, against a measured **0.056 km** of element-set
+   quantization. This is the repository's central claim and both sides of it are now numbers. It
+   used to read "around ten orders" against "0.3 to 3 km of element-set quantization"; that was a
+   projection, the quantization has since been measured at a twentieth of it, and the claim survives
+   comfortably either way. See below.
 2. **`float` fails silently.** 55 km out and not one row reported an error: the model's error codes
    for an eccentricity or mean motion out of range are never tripped. It returns a confident wrong
    answer, which is the expensive failure mode.
-3. **Thirty digits agrees with the published vectors *nine times worse* than `double` does.** Not a
+3. **Thirty digits agrees with the published vectors *four times worse* than `double` does.** Not a
    defect — the precise run is the more correct one. The published vectors were computed in
    `double`, so agreeing with them closely is a property of making the same rounding errors. If
    precision were the limiting factor, a 30-digit run would agree to 1e-30 km.
-4. **`decimal`'s twelve extra digits buy a factor of 2.8, and cost a factor of 5.6.** Better than
-   `double` at the median, worse at the extreme, and nowhere near the twelve orders of magnitude the
-   digit counts suggest. See domain trap 11 for why.
+4. **`decimal`'s twelve extra digits buy nothing, and cost a factor of 12.6.** Level with `double`
+   at the median, an order of magnitude worse at the extreme, and nowhere near the twelve orders of
+   magnitude the digit counts suggest. It read "a factor of 2.8 better at the median" until the
+   epoch sidereal time was shared; that advantage was `double`'s own single-date evaluation of one
+   angle, which `decimal` did not share. See domain trap 10 for why.
 
 **M2's data layer is in.** `Osculator.Data/CelesTrak/` holds a client, a response cache and a
 snapshot store. The cache is the part with an obligation attached rather than a preference —
@@ -134,9 +147,9 @@ residual cannot reach `Geodetic` without going all the way, because that overloa
 `ItrfState<T>`. Polar motion is about 12 m at the surface for present-day pole coordinates, not the
 9 m first estimated here.
 
-There are no IERS test vectors here, so the transform is checked against physics instead — which
-for this one is stronger than it sounds. A geostationary satellite has to stay over one longitude,
-and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
+Gate 3 now has a published reference (see the gate list below). The physics checks stay, and
+for this transform they are stronger than they sound. A geostationary satellite has to stay over
+one longitude, and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
 rotating-frame velocity while that still holds. Mutation-checked, not merely watched to pass:
 
 | mutation | what the test read |
@@ -216,6 +229,15 @@ Three things to take from it, all asserted:
    3.3 m of along-track at half a step. Steps are the TLE's, so for an OMM-ingested set (trap 6) the
    figure is an upper bound.
 
+**Residual statistics are accumulated in the storage type, with no compensation.**
+`ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
+`ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
+class run twice. Over a million metre-scale residuals with a closed-form answer of exactly
+333,833.5 km², `PreciseNumber` returns every digit and naive `double` summation returns
+333,833.49999995285: a relative error of **1.4e-13, about three digits lost**. The sums are
+deliberately not passed through `ToWorkingPrecision` — exact addition grows only by the exponent span
+and the count, not per term — and `ThePreciseSumsAreNotReducedToTheWorkingPrecision` fails if they are.
+
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
 
@@ -226,8 +248,8 @@ checks the harness rather than the result. Two claims:
 
 The first is what makes every other number in the comparison mean anything. A thirty-digit run is
 not exact arithmetic, it is thirty-digit arithmetic; if its own error were anywhere near the
-1.6e-10 km it is used to measure, the central claim would be measuring the reference rather than
-`double`. It is **eleven orders below** that, so it is not.
+4.7e-11 km it is used to measure, the central claim would be measuring the reference rather than
+`double`. It is **ten orders below** that, so it is not.
 
 **The gate has a guard against passing vacuously, and that guard was added because the first
 version would have.** A harness whose precision argument never reached the arithmetic — so that
@@ -248,6 +270,34 @@ quotients, which the `/` operator rounds to fifty digits whatever precision was 
 It costs about twelve seconds, because it sweeps the whole verification set twice in
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
+
+**The cost of precision is measured too, and M3's performance gate has a budget.**
+`Osculator.Benchmarks/Sgp4Benchmarks.cs` times one initialization plus a one-day propagation in each
+storage type, on a near-earth case (06251) and a half-day-resonant Molniya (21897) from the
+verification set. BenchmarkDotNet, short job, one 2.8 GHz Xeon core:
+
+| | near-earth | deep-space | vs `double` | allocated |
+|---|---|---|---|---|
+| `float` | 0.66 µs | 1.8 µs | **0.6x** | 0.5x |
+| `double` | 1.1 µs | 3.0 µs | 1x | 672 B / 920 B |
+| `decimal` | 91 µs | 344 µs | **80–114x** | 2x |
+| `PreciseNumber` (30 digits) | **9.2 ms** | **21 ms** | **7,100–8,100x** | 1.2 MB / 3.7 MB |
+
+Read it beside the Δ_arith table above. Thirty digits costs four orders of magnitude to move the
+answer by 1.6e-10 km, which is the right price for a reference computed once for the object a user
+selected and the wrong one for anything run over the catalogue. `decimal` costs two orders of
+magnitude and, per trap 10, does not buy the digits it advertises.
+
+**The budget is 100 ms for one `PreciseNumber` initialization plus propagation** — the point past
+which an on-demand reference stops feeling immediate. `PropagationBudget` (run as
+`dotnet run --project Osculator.Benchmarks -c Release -- --budget`) times it on both orbits, fastest
+of five after a warm-up, and exits non-zero above ten times the budget; CI runs it on every push. It
+is a stopwatch rather than BenchmarkDotNet on purpose: the regression it exists for is trap 9, which
+is not a few percent but a propagation that never finishes, and a factor of ten separates that from
+runner noise in both directions. Every run is bounded by the ceiling, warm-up included, so that
+regression fails the step in seconds instead of hanging it. **Mutation-checked**: with
+`ToWorkingPrecision` made the identity, both orbits report "did not finish within 1000 ms" and the
+step fails in about three seconds.
 
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
@@ -288,7 +338,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
 | `Osculator.Numerics.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
 | `Osculator.Core/Numerics` | `DecimalMath`: sqrt, sin, cos, atan2, exp, log and pow for `decimal`, which the base library has none of |
-| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
+| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package. Each is an `IPropagatorHost`: `Propagate(ElementSet, minutesSinceEpoch)` runs SGP4 in its storage type and returns a non-generic `PropagatedState` (TEME km and km/s as `double`, plus wall-clock). That is the seam every panel calls; never difference two of those states to measure Δ_arith, since both are already rounded to `double` |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
 | `Osculator.Benchmarks` | BenchmarkDotNet, cost per propagation per storage type |
@@ -322,8 +372,12 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    makes results *worse*, because the model is a fit and the constants are part of the fit.
 3. **SGP4 outputs TEME, not J2000.** True Equator Mean Equinox is a distinct frame. Treating SGP4
    output as ECI/J2000 is the most common bug in amateur trackers and costs 100 m to several km.
-4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000, so one ulp is
-   ~48 µs. That is why the two-part Julian Date exists. In `PreciseNumber` it is exact.
+4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000 lies between 2²¹
+   and 2²², so one ulp is 2⁻³¹ days: **40.2 µs**, measured. The 48 µs usually quoted (this file
+   said it too) is machine epsilon times the date, a bound that overstates the spacing by JD / 2²¹.
+   That is why the two-part Julian Date exists. In `PreciseNumber` it is exact.
+   `JulianDateStaircase` sweeps it and `JulianDateStaircaseTests` pins the tread and the 31 cm
+   risers it puts on along-track position at ISS speed.
 5. **Residuals belong in RIC/RSW**, not XYZ. Orbital error is overwhelmingly along-track — essentially
    a timing error — and XYZ scrambles that across three axes rotating with the orbit.
 6. **The OMM JSON carries more precision than the two-line text for some fields.** The JSON is
@@ -443,18 +497,36 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
    `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
    without saying so, is the result.
-3. Frame transforms against IERS test vectors.
+3. Frame transforms against a published reference vector. **Passing.** `FrameCorrectnessTests`
+   runs the worked example in Appendix C of Vallado et al. 2006 (AIAA 2006-6753 Rev 2) through
+   TEME → PEF and PEF → ITRF separately, so a failure says whether rotation or polar motion broke.
+   Positions agree to 5.7e-8 km against the paper's 1e-7 km last digit; velocity to 1.0e-8 km/s,
+   which is the paper's length-of-day correction to ω, not carried here. **The paper's own instant
+   is 14.7 µs off the one it names**: its program forms UT1 as one `double`, which is the
+   Julian-date staircase of trap 4. From the exact two-part instant the PEF vector lands 8.5 mm
+   away, and the test asserts that whole gap is that rotation. So `SiderealAngle` is matched to
+   the paper by feeding it the paper's rounded instant, not by rounding its own: it evaluates
+   GMST from the two parts without ever summing them, rising at every microsecond and within
+   8.2e-14 rad of a 50-digit evaluation, where the single-`double` sum was off by up to 1.4e-9 rad.
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
-6. Benchmarks in CI, per storage type per propagator.
+6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
+   `PreciseNumber` path rather than a timed comparison, because a shared runner measures itself; the
+   per-type figures come from `Sgp4Benchmarks` run locally.
 
 ## Data source etiquette
 
 Every client caches to disk and works offline from cache. This is enforced, not advisory:
 
 - **CelesTrak** asks for caching and infrequent refetch in its usage guidelines.
-- **Space-Track** limits are hard — under 30 requests/minute and 300/hour.
+- **Space-Track** limits are hard — under 30 requests/minute and 300/hour. `SpaceTrackRateLimiter`
+  enforces 29 and 299 over sliding windows, counts the login, and refuses rather than queues; the
+  ceilings can be lowered but not raised. `SpaceTrackClient` also refuses a cache shorter than an
+  hour, because Space-Track asks that `gp` be queried no more often than that. The password is read
+  from the OS credential store by `OsCredentialStore` (Credential Manager, Keychain, Secret Service),
+  whose remarks give the one command per platform that stores it. The client's tests run against a
+  fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
   in this repository.
 
