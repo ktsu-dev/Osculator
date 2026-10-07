@@ -168,4 +168,32 @@ public sealed class TleParserTests
 
 		Assert.Contains("column 1", error.Message, StringComparison.Ordinal);
 	}
+
+	/// <summary>
+	/// <see cref="IssLine2"/> with its catalogue number changed to Hubble's, 20580, and its
+	/// checksum digit recomputed, so it passes every check a line can pass on its own.
+	/// </summary>
+	private const string OtherObjectLine2 = "2 20580  51.6310 211.2092 0004923 144.3133 215.8185 15.49128922585817";
+
+	[TestMethod]
+	public void Parse_RejectsLinesFromDifferentObjects()
+	{
+		// Both lines are well-formed and checksum-valid; only the pairing is wrong. Accepting it
+		// would label the second object's orbit with the first object's catalogue number.
+		FormatException error = Assert.ThrowsExactly<FormatException>(() => TleParser.Parse(IssLine1, OtherObjectLine2));
+
+		Assert.Contains("25544", error.Message, StringComparison.Ordinal);
+		Assert.Contains("20580", error.Message, StringComparison.Ordinal);
+	}
+
+	[TestMethod]
+	public void Parse_ChecksTheCatalogueNumbersEvenWhenIgnoringChecksums()
+	{
+		// A structural check, not a checksum, so the escape hatch for constructed vectors does not
+		// switch it off.
+		FormatException error = Assert.ThrowsExactly<FormatException>(
+			() => TleParser.Parse(IssLine1, OtherObjectLine2, checksum: TleChecksum.Ignore));
+
+		Assert.Contains("catalogue number", error.Message, StringComparison.Ordinal);
+	}
 }

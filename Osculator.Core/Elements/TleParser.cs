@@ -39,8 +39,8 @@ public static class TleParser
 	/// <returns>The element set, in the units the format uses: degrees and revolutions per day.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="line1"/> or <paramref name="line2"/> is null.</exception>
 	/// <exception cref="FormatException">
-	/// Either line is too short, does not begin with its line number, fails its checksum, or carries
-	/// a field that will not parse.
+	/// Either line is too short, does not begin with its line number, names a different catalogue
+	/// number from the other line, fails its checksum, or carries a field that will not parse.
 	/// </exception>
 	public static ElementSet Parse(string line1, string line2, string? objectName = null, TleChecksum checksum = TleChecksum.Verify)
 	{
@@ -58,6 +58,7 @@ public static class TleParser
 		// somewhere in transit — the corruption that is otherwise indistinguishable from an orbit.
 		VerifyLineNumber(line1, '1');
 		VerifyLineNumber(line2, '2');
+		VerifyCatalogNumbersMatch(line1, line2);
 
 		if (checksum == TleChecksum.Verify)
 		{
@@ -115,6 +116,27 @@ public static class TleParser
 		if (line[0] != expected)
 		{
 			throw new FormatException($"A two-line element set carries '{expected}' in column 1 of line {expected}; got '{line[0]}'. The two lines may be swapped.");
+		}
+	}
+
+	/// <summary>Confirms both lines carry the same catalogue number in columns 3-7.</summary>
+	/// <param name="line1">The first line.</param>
+	/// <param name="line2">The second line.</param>
+	/// <exception cref="FormatException">The two numbers differ.</exception>
+	/// <remarks>
+	/// Each line has its own checksum, so line 1 of one object and line 2 of the next both pass
+	/// every other check. That is exactly what pairing a multi-object file off by one line produces,
+	/// and without this the result is one object's orbit under another's catalogue number. The
+	/// columns are compared as text so the alphanumeric (Alpha-5) form is compared as written.
+	/// </remarks>
+	private static void VerifyCatalogNumbersMatch(string line1, string line2)
+	{
+		string first = line1.Substring(2, 5).Trim();
+		string second = line2.Substring(2, 5).Trim();
+
+		if (!string.Equals(first, second, StringComparison.Ordinal))
+		{
+			throw new FormatException($"The two lines of a two-line element set name different objects: catalogue number {first} on line 1 and {second} on line 2.");
 		}
 	}
 
