@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Numerics;
 
 /// <summary>
@@ -120,10 +121,8 @@ public sealed class LeapSeconds
 		DateOnly? expiresOn = null;
 		const string expiryMarker = "File expires on";
 
-		foreach (string rawLine in text.Split('\n'))
+		foreach (string line in text.Split('\n').Select(static rawLine => rawLine.Trim()))
 		{
-			string line = rawLine.Trim();
-
 			if (line.Length == 0)
 			{
 				continue;
@@ -220,12 +219,13 @@ public sealed class LeapSeconds
 		string[] fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
 		if (fields.Length != 5
-			|| !double.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double mjdValue)
+			|| !decimal.TryParse(fields[0], NumberStyles.Float, CultureInfo.InvariantCulture, out decimal mjdValue)
 			|| !int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int day)
 			|| !int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int month)
 			|| !int.TryParse(fields[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int year)
 			|| !int.TryParse(fields[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out int offset)
-			|| mjdValue != System.Math.Floor(mjdValue)
+			|| mjdValue != decimal.Truncate(mjdValue)
+			|| mjdValue is < 0 or > int.MaxValue
 			|| year is < 1 or > 9999
 			|| month is < 1 or > 12
 			|| day < 1
