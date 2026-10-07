@@ -118,6 +118,14 @@ that the column mapping is right. Today's values come back flagged `IsPrediction
 IERS finalises about a week in arrears, and a forecast's stated uncertainty on UT1 − UTC runs from
 four times the final one to a thousand times it a year out.
 
+**Those uncertainties are carried now, and measured in metres as part of Δ_data.**
+`EarthOrientation` holds the file's sigma columns for the pole and UT1 − UTC; between rows the
+larger neighbour's sigma is reported, and a row with values but no sigma reads NaN rather than zero.
+`Residuals/EarthOrientationTerm` rotates a TEME state to the ITRF with each parameter at ±σ in turn
+and combines them in quadrature, refusing an unknown sigma. At LEO a final row is worth about a
+centimetre, led by UT1 − UTC; a forecast a year out is metres. Without this, once residuals are
+taken in the ITRF, that share would be counted as Δ_model (spec §11).
+
 **The frame layer exists now, and it is honest about where it stops.** `Osculator.Core/Frames/`
 rotates TEME into the Earth-fixed frame and converts that to geodetic latitude, longitude and
 altitude. `PefState<T>` remains the named intermediate — TEME → PEF is the sidereal rotation, PEF →
