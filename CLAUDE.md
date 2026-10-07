@@ -431,7 +431,13 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 Every client caches to disk and works offline from cache. This is enforced, not advisory:
 
 - **CelesTrak** asks for caching and infrequent refetch in its usage guidelines.
-- **Space-Track** limits are hard — under 30 requests/minute and 300/hour.
+- **Space-Track** limits are hard — under 30 requests/minute and 300/hour. `SpaceTrackRateLimiter`
+  enforces 29 and 299 over sliding windows, counts the login, and refuses rather than queues; the
+  ceilings can be lowered but not raised. `SpaceTrackClient` also refuses a cache shorter than an
+  hour, because Space-Track asks that `gp` be queried no more often than that. The password is read
+  from the OS credential store by `OsCredentialStore` (Credential Manager, Keychain, Secret Service),
+  whose remarks give the one command per platform that stores it. The client's tests run against a
+  fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
   in this repository.
 
