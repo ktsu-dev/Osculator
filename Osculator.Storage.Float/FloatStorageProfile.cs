@@ -2,6 +2,9 @@
 
 namespace ktsu.Osculator.Storage;
 
+using System;
+using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Storage;
 
 /// <summary>
@@ -12,8 +15,12 @@ using ktsu.Osculator.Core.Storage;
 /// million metres has an ulp of half a metre, so a comparison against a centimetre-accurate
 /// laser-ranging orbit is not inaccurate here — it is impossible, before any physics is computed.
 /// </remarks>
-public sealed class FloatStorageProfile : IStorageProfile
+public sealed class FloatStorageProfile : IPropagatorHost
 {
+	// The storage type is inferred from the math instance and never written here.
+	private readonly Func<ElementSet, double, PropagatedState> propagate =
+		Sgp4PropagatorHost.Create(FloatStorageMath.Instance).Propagate;
+
 	/// <inheritdoc />
 	public string StorageName => "float";
 
@@ -23,6 +30,15 @@ public sealed class FloatStorageProfile : IStorageProfile
 	/// <inheritdoc />
 	public double SmallestDistinguishableStepMeters(double magnitudeMeters) =>
 		double.CreateTruncating(StorageProbe.SmallestDistinguishableStep(float.CreateTruncating(magnitudeMeters)));
+
+	/// <inheritdoc />
+	/// <remarks>
+	/// Tens of kilometres wrong over the verification set, and it never says so: the model's own
+	/// range checks are not tripped. A <see cref="PropagatedState.IsSuccess"/> from this facade means
+	/// the model ran, not that the answer is close.
+	/// </remarks>
+	public PropagatedState Propagate(ElementSet elements, double minutesSinceEpoch) =>
+		propagate(elements, minutesSinceEpoch);
 
 	/// <summary>
 	/// Gets a nominal low Earth orbital radius, built through the alias package's quantity types.

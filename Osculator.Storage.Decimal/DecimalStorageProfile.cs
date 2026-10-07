@@ -2,6 +2,9 @@
 
 namespace ktsu.Osculator.Storage;
 
+using System;
+using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Storage;
 
 /// <summary>
@@ -21,8 +24,12 @@ using ktsu.Osculator.Core.Storage;
 /// <c>StorageComparisonTests</c>.
 /// </para>
 /// </remarks>
-public sealed class DecimalStorageProfile : IStorageProfile
+public sealed class DecimalStorageProfile : IPropagatorHost
 {
+	// The storage type is inferred from the math instance and never written here.
+	private readonly Func<ElementSet, double, PropagatedState> propagate =
+		Sgp4PropagatorHost.Create(DecimalStorageMath.Instance).Propagate;
+
 	/// <inheritdoc />
 	public string StorageName => "decimal";
 
@@ -32,6 +39,10 @@ public sealed class DecimalStorageProfile : IStorageProfile
 	/// <inheritdoc />
 	public double SmallestDistinguishableStepMeters(double magnitudeMeters) =>
 		double.CreateTruncating(StorageProbe.SmallestDistinguishableStep(decimal.CreateTruncating(magnitudeMeters)));
+
+	/// <inheritdoc />
+	public PropagatedState Propagate(ElementSet elements, double minutesSinceEpoch) =>
+		propagate(elements, minutesSinceEpoch);
 
 	/// <summary>
 	/// Gets a nominal low Earth orbital radius, built through the alias package's quantity types.

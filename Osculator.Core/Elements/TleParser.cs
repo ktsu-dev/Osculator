@@ -4,6 +4,7 @@ namespace ktsu.Osculator.Core.Elements;
 
 using System;
 using System.Globalization;
+using System.Linq;
 using ktsu.Osculator.Core.Time;
 
 /// <summary>
@@ -74,7 +75,7 @@ public static class TleParser
 		{
 			ObjectName = objectName?.Trim() ?? string.Empty,
 			ObjectId = line1.Substring(9, 8).Trim(),
-			NoradCatalogId = Integer(line1, 2, 5),
+			NoradCatalogId = CatalogNumber(line1),
 			Epoch = EpochOf(fullYear, epochDays),
 			EpochJulianDate = JulianDate.FromDayOfYear(fullYear, epochDays),
 			MeanMotionDot = Decimal(line1, 33, 10),
@@ -126,18 +127,56 @@ public static class TleParser
 	/// <remarks>
 	/// Each line has its own checksum, so line 1 of one object and line 2 of the next both pass
 	/// every other check. That is exactly what pairing a multi-object file off by one line produces,
-	/// and without this the result is one object's orbit under another's catalogue number. The
-	/// columns are compared as text so the alphanumeric (Alpha-5) form is compared as written.
+	/// and without this the result is one object's orbit under another's catalogue number. Both
+	/// fields go through the same decoder, so an Alpha-5 number is compared by value.
 	/// </remarks>
 	private static void VerifyCatalogNumbersMatch(string line1, string line2)
 	{
-		string first = line1.Substring(2, 5).Trim();
-		string second = line2.Substring(2, 5).Trim();
+		int first = CatalogNumber(line1);
+		int second = CatalogNumber(line2);
 
-		if (!string.Equals(first, second, StringComparison.Ordinal))
+		if (first != second)
 		{
 			throw new FormatException($"The two lines of a two-line element set name different objects: catalogue number {first} on line 1 and {second} on line 2.");
 		}
+	}
+
+	/// <summary>Reads the catalogue number in columns 3-7, in either its numeric or Alpha-5 form.</summary>
+	/// <param name="line">The line.</param>
+	/// <returns>The catalogue number.</returns>
+	/// <exception cref="FormatException">The field is neither form.</exception>
+	/// <remarks>
+	/// Five columns hold at most 99999, and the catalogue passed that. Numbers from 100000 to 339999
+	/// are written in the Alpha-5 scheme: a leading capital letter standing for 10 to 33, skipping
+	/// <c>I</c> and <c>O</c> because they read as digits, followed by four digits. <c>A0001</c> is
+	/// 100001 and <c>Z9999</c> is 339999. The checksum is unaffected, since a letter counts as nothing.
+	/// </remarks>
+	private static int CatalogNumber(string line)
+	{
+		string field = line.Substring(2, 5);
+		char lead = field[0];
+
+		if (lead is < 'A' or > 'Z')
+		{
+			return Integer(line, 2, 5);
+		}
+
+		if (lead is 'I' or 'O')
+		{
+			throw new FormatException($"Catalogue number '{field}' is not valid Alpha-5: the scheme skips the letters I and O.");
+		}
+
+		string digits = field[1..];
+
+		if (digits.Length != 4 || !digits.All(c => c is >= '0' and <= '9'))
+		{
+			throw new FormatException($"Catalogue number '{field}' is not valid Alpha-5: a letter must be followed by four digits.");
+		}
+
+		// A-H are 10-17, J-N are 18-22 once I is skipped, and P-Z are 23-33 once O is too.
+		int letterValue = 10 + (lead - 'A') - (lead > 'I' ? 1 : 0) - (lead > 'O' ? 1 : 0);
+
+		return (letterValue * 10000) + int.Parse(digits, NumberStyles.None, CultureInfo.InvariantCulture);
 	}
 
 	/// <summary>Confirms a line's modulo-10 checksum digit agrees with the rest of the line.</summary>
@@ -226,9 +265,18 @@ public static class TleParser
 	/// <param name="length">The field width, eight in every current use.</param>
 	/// <returns>The value.</returns>
 	/// <remarks>
+	/// <para>
 	/// <c>" 11249-3"</c> is 0.11249 × 10⁻³. The leading character is the mantissa's sign and is a
 	/// space when positive; the final two are the exponent's sign and one digit. Five mantissa
 	/// digits is the whole of the precision the format keeps for these fields.
+	/// </para>
+	/// <para>
+	/// The mantissa is scaled by its column width, never by the digits left after trimming.
+	/// Some generators pad it with spaces rather than zeros, so <c>"  1234-4"</c> and
+	/// <c>" 01234-4"</c> are the same value, and the checksum cannot tell them apart: a space
+	/// and a zero both count as nothing. Scaling by the trimmed length would read the first as
+	/// ten times the second and hand SGP4 a drag term it propagates without complaint.
+	/// </para>
 	/// </remarks>
 	private static double AssumedDecimal(string line, int start, int length)
 	{
@@ -240,12 +288,13 @@ public static class TleParser
 			return 0.0;
 		}
 
+		int mantissaWidth = length - 3;
 		double sign = field[0] == '-' ? -1.0 : 1.0;
-		string mantissa = field.Substring(1, length - 3).Trim();
+		string mantissa = field.Substring(1, mantissaWidth).Trim();
 		string exponent = field[(length - 2)..].Trim();
 
 		double value = double.Parse(mantissa, NumberStyles.Integer, CultureInfo.InvariantCulture)
-			/ System.Math.Pow(10.0, mantissa.Length);
+			/ System.Math.Pow(10.0, mantissaWidth);
 		int power = int.Parse(exponent, NumberStyles.Integer | NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
 
 		return sign * value * System.Math.Pow(10.0, power);
