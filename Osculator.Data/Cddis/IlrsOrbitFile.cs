@@ -101,24 +101,26 @@ public sealed partial record IlrsOrbitFile(string Centre, string Satellite, Date
 
 		// The name can be preceded by a path or surrounded by markup in an HTML listing, so the
 		// pattern is searched for inside each word rather than matched against the whole of it.
-		IEnumerable<Match> matches = listing
+		return listing
 			.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-			.Select(word => NamePattern().Match(word));
-
-		foreach (Match match in matches)
-		{
-			if (match.Success
-				&& DateOnly.TryParseExact(match.Groups["date"].Value, "yyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
-			{
-				yield return new IlrsOrbitFile(
-					match.Groups["centre"].Value,
-					match.Groups["sat"].Value,
-					date,
-					int.Parse(match.Groups["version"].Value, CultureInfo.InvariantCulture),
-					match.Value);
-			}
-		}
+			.Select(word => NamePattern().Match(word))
+			.Where(match => match.Success)
+			.Select(FromMatch)
+			.OfType<IlrsOrbitFile>();
 	}
+
+	/// <summary>Builds a file from a name the pattern matched, or nothing when its date is not a date.</summary>
+	/// <param name="match">A successful match of the name pattern.</param>
+	/// <returns>The file, or null.</returns>
+	private static IlrsOrbitFile? FromMatch(Match match) =>
+		DateOnly.TryParseExact(match.Groups["date"].Value, "yyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date)
+			? new IlrsOrbitFile(
+				match.Groups["centre"].Value,
+				match.Groups["sat"].Value,
+				date,
+				int.Parse(match.Groups["version"].Value, CultureInfo.InvariantCulture),
+				match.Value)
+			: null;
 
 	internal static void RequireSatellite(string satellite)
 	{
