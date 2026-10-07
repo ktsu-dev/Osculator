@@ -144,9 +144,9 @@ residual cannot reach `Geodetic` without going all the way, because that overloa
 `ItrfState<T>`. Polar motion is about 12 m at the surface for present-day pole coordinates, not the
 9 m first estimated here.
 
-There are no IERS test vectors here, so the transform is checked against physics instead — which
-for this one is stronger than it sounds. A geostationary satellite has to stay over one longitude,
-and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
+Gate 3 now has a published reference (see the gate list below). The physics checks stay, and
+for this transform they are stronger than they sound. A geostationary satellite has to stay over
+one longitude, and essentially nothing can be wrong in the rotation sense, the sidereal rate or the
 rotating-frame velocity while that still holds. Mutation-checked, not merely watched to pass:
 
 | mutation | what the test read |
@@ -201,6 +201,15 @@ the probe was secretly the reference — reports a difference of exactly zero, w
 an upper bound of 1e-15. The test now requires the difference to be **non-zero** first. Verified by
 clamping `PreciseStorageMath.SignificantDigits` to 30: the sweep reads 0.000e+000 and the guard
 fires.
+
+**Neither half of the gate can see the reference computing in `double`**, because a conversion
+through `double` is deterministic and both runs share it — routing four functions through it made
+the convergence sweep read *better* (#25). `PreciseStorageMathTests` closes that: every function is
+checked against digits computed by mpmath, at 30 and at 100 digits, and routing any one of `Sqrt`,
+`Sin`, `Cos`, `Atan2` or `Pow` through `double` fails it. Mutation-checked, one function at a time.
+`Pow` computes its fractional path itself, because PreciseNumber's two-argument `Pow` stops at fifty
+digits for short operands (#67), and `IStorageMath<T>.Divide` is the seam for literal-over-literal
+quotients, which the `/` operator rounds to fifty digits whatever precision was asked for (#42).
 
 It costs about twelve seconds, because it sweeps the whole verification set twice in
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
@@ -273,7 +282,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
 | `Osculator.Numerics.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
 | `Osculator.Core/Numerics` | `DecimalMath`: sqrt, sin, cos, atan2, exp, log and pow for `decimal`, which the base library has none of |
-| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
+| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package. Each is an `IPropagatorHost`: `Propagate(ElementSet, minutesSinceEpoch)` runs SGP4 in its storage type and returns a non-generic `PropagatedState` (TEME km and km/s as `double`, plus wall-clock). That is the seam every panel calls; never difference two of those states to measure Δ_arith, since both are already rounded to `double` |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
 | `Osculator.Benchmarks` | BenchmarkDotNet, cost per propagation per storage type |
@@ -431,7 +440,17 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
    `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
    without saying so, is the result.
-3. Frame transforms against IERS test vectors.
+3. Frame transforms against a published reference vector. **Passing.** `FrameCorrectnessTests`
+   runs the worked example in Appendix C of Vallado et al. 2006 (AIAA 2006-6753 Rev 2) through
+   TEME → PEF and PEF → ITRF separately, so a failure says whether rotation or polar motion broke.
+   Positions agree to 5.7e-8 km against the paper's 1e-7 km last digit; velocity to 1.0e-8 km/s,
+   which is the paper's length-of-day correction to ω, not carried here. **The paper's own instant
+   is 14.7 µs off the one it names**: its program forms UT1 as one `double`, which is the
+   Julian-date staircase of trap 4. From the exact two-part instant the PEF vector lands 8.5 mm
+   away, and the test asserts that whole gap is that rotation. So `SiderealAngle` is matched to
+   the paper by feeding it the paper's rounded instant, not by rounding its own: it evaluates
+   GMST from the two parts without ever summing them, rising at every microsecond and within
+   8.2e-14 rad of a 50-digit evaluation, where the single-`double` sum was off by up to 1.4e-9 rad.
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
