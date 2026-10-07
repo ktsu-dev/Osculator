@@ -93,7 +93,7 @@ public sealed class ResponseCache
 	private readonly ConcurrentDictionary<string, Attempt> attempts = new(StringComparer.Ordinal);
 
 	/// <summary>The one request per key currently on the wire.</summary>
-	private readonly ConcurrentDictionary<string, Task<Fetched<string>>> inFlight = new(StringComparer.Ordinal);
+	private readonly ConcurrentDictionary<string, Lazy<Task<Fetched<string>>>> inFlight = new(StringComparer.Ordinal);
 
 	/// <summary>Creates a cache.</summary>
 	/// <param name="directory">The directory to hold cached responses in.</param>
@@ -243,15 +243,20 @@ public sealed class ResponseCache
 		// Unique, so two writers of one key never share a temporary file.
 		string temporary = FormattableString.Invariant($"{path}.{Guid.NewGuid():N}.tmp");
 
+		bool moved = false;
+
 		try
 		{
 			File.WriteAllText(temporary, contents);
 			File.Move(temporary, path, overwrite: true);
+			moved = true;
 		}
-		catch
+		finally
 		{
-			TryDelete(temporary);
-			throw;
+			if (!moved)
+			{
+				TryDelete(temporary);
+			}
 		}
 	}
 
@@ -341,55 +346,29 @@ public sealed class ResponseCache
 	/// <param name="download">Asks the source.</param>
 	/// <param name="isUnavailable">Classifies its failures.</param>
 	/// <returns>The shared request.</returns>
+	/// <remarks>
+	/// The request is held behind a <see cref="Lazy{T}"/> so that losing the race to add it never
+	/// starts a second one: only the instance that was added is ever run, and only the caller that
+	/// added it removes it again once it has finished.
+	/// </remarks>
 	private Task<Fetched<string>> Join(
 		string key,
 		Func<string?, CancellationToken, Task<string>> download,
 		Func<Exception, bool> isUnavailable)
 	{
-		while (true)
-		{
-			if (inFlight.TryGetValue(key, out Task<Fetched<string>>? running))
-			{
-				return running;
-			}
+		Lazy<Task<Fetched<string>>> mine = new(() => RunAsync(key, download, isUnavailable));
+		Lazy<Task<Fetched<string>>> shared = inFlight.GetOrAdd(key, mine);
 
-			TaskCompletionSource<Fetched<string>> shared = new(TaskCreationOptions.RunContinuationsAsynchronously);
+		if (ReferenceEquals(shared, mine))
+		{
+			_ = mine.Value.ContinueWith(
+				_ => inFlight.TryRemove(new KeyValuePair<string, Lazy<Task<Fetched<string>>>>(key, mine)),
+				CancellationToken.None,
+				TaskContinuationOptions.ExecuteSynchronously,
+				TaskScheduler.Default);
+		}
 
-			if (inFlight.TryAdd(key, shared.Task))
-			{
-				_ = CompleteAsync(key, shared, download, isUnavailable);
-				return shared.Task;
-			}
-		}
-	}
-
-	/// <summary>Runs the shared request and hands its outcome to every caller waiting on it.</summary>
-	/// <param name="key">The cache key.</param>
-	/// <param name="shared">Where the outcome goes.</param>
-	/// <param name="download">Asks the source.</param>
-	/// <param name="isUnavailable">Classifies its failures.</param>
-	/// <returns>A task that never faults.</returns>
-	[System.Diagnostics.CodeAnalysis.SuppressMessage(
-		"Design", "CA1031:Do not catch general exception types",
-		Justification = "Every failure is handed on to the callers sharing the request, unchanged.")]
-	private async Task CompleteAsync(
-		string key,
-		TaskCompletionSource<Fetched<string>> shared,
-		Func<string?, CancellationToken, Task<string>> download,
-		Func<Exception, bool> isUnavailable)
-	{
-		try
-		{
-			shared.SetResult(await RunAsync(key, download, isUnavailable).ConfigureAwait(false));
-		}
-		catch (Exception failure)
-		{
-			shared.SetException(failure);
-		}
-		finally
-		{
-			_ = inFlight.TryRemove(new KeyValuePair<string, Task<Fetched<string>>>(key, shared.Task));
-		}
+		return shared.Value;
 	}
 
 	/// <summary>Decides whether to ask the source, asks it, and stores what comes back.</summary>
