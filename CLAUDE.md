@@ -462,6 +462,12 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    resolution, not the polynomial. Within half a window of either end the window cannot be centred
    and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
    Thirty-digit arithmetic moves none of these by more than a few nanometres.
+   **M4's SGP4-vs-laser-ranging gate is wired end to end** (`LageosGate`, `TruthComparison<T>`):
+   a public element set propagated to every epoch of an ILRS orbit and resolved into RSW. Measured
+   on LAGEOS-2 against an ILRS prediction, 12 to 36 hours before the element set's epoch: **RMS
+   0.445 km, worst 0.627 km**, along-track 0.419 km RMS against 0.023 radial and 0.147 cross-track —
+   under a kilometre, where the spec projected "kilometres wrong". The LAGEOS-1 run against CDDIS
+   and Space-Track needs both accounts; `SlrResidualGateTests` says how to run it.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
 6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
