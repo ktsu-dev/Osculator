@@ -259,7 +259,7 @@ public static class KeplerSolvers<T>
 		for (int k = 1; k <= MaximumSeriesTerms; k++)
 		{
 			// (2k+2)! = (2k)! · (2k+1)(2k+2), and (2k+3)! = (2k+1)! · (2k+2)(2k+3).
-			T twoK = N(2 * k);
+			T twoK = N(2) * N(k);
 			termC = math.ToWorkingPrecision(termC * negated / ((twoK + T.One) * (twoK + N(2))));
 			termS = math.ToWorkingPrecision(termS * negated / ((twoK + N(2)) * (twoK + N(3))));
 

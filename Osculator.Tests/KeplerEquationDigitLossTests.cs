@@ -163,8 +163,8 @@ public sealed class KeplerEquationDigitLossTests
 	public void AtMolniyaEccentricity_DecimalLosesDigitsToItsAbsolutePrecision()
 	{
 		List<Row> decimals = [.. Molniya.Value.Where(r => r.Type == "decimal")];
-		Row nearest = decimals.Single(r => r.MeanAnomaly == MeanAnomalies[^1]);
-		Row farthest = decimals.Single(r => r.MeanAnomaly == MeanAnomalies[0]);
+		Row nearest = decimals.Single(r => IsAt(r, MeanAnomalies[^1]));
+		Row farthest = decimals.Single(r => IsAt(r, MeanAnomalies[0]));
 
 		// The naive eccentric anomaly loses digits in step with how small it is: E ≈ M / (1 − e), and
 		// a decimal holds a number of that size to 28 + log10(E) significant digits. Measured 0.12
@@ -190,7 +190,7 @@ public sealed class KeplerEquationDigitLossTests
 
 		// E₀ = M at M = 0.1 sends single precision's Newton iteration away and it does not return.
 		// Measured: 8.7e10 after the iteration cap.
-		Row diverged = rows.Single(r => r.Type == "float" && r.MeanAnomaly == 0.1);
+		Row diverged = rows.Single(r => r.Type == "float" && IsAt(r, 0.1));
 		Assert.IsFalse(diverged.NaiveConverged, "The naive float solve at e = 0.99, M = 0.1 is expected to diverge.");
 
 		// And the cancellation starts to show: 1 − e = 0.01 is two digits of it. Measured worst 1.67
@@ -199,6 +199,12 @@ public sealed class KeplerEquationDigitLossTests
 		Assert.IsGreaterThan(1.2, worstDouble, "At e = 0.99 the naive solve is expected to lose more than a digit near perigee.");
 		Assert.IsLessThan(2.5, worstDouble);
 	}
+
+	/// <summary>Whether a row was measured at a given mean anomaly.</summary>
+	/// <param name="row">The row.</param>
+	/// <param name="meanAnomaly">The mean anomaly, one of <see cref="MeanAnomalies"/>.</param>
+	/// <returns>Whether they match, to a relative tolerance far below the spacing of the samples.</returns>
+	private static bool IsAt(Row row, double meanAnomaly) => Math.Abs(row.MeanAnomaly - meanAnomaly) <= 1e-9 * meanAnomaly;
 
 	/// <summary>Writes the measured table to the test output.</summary>
 	/// <param name="eccentricity">The eccentricity measured.</param>

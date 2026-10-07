@@ -92,7 +92,6 @@ public static class Keplerian<T>
 		T radialTerm = math.ToWorkingPrecision(radialDot / sqrtMu);
 
 		T span = seconds;
-		T initialGuess;
 		if (alpha > T.Zero)
 		{
 			// An ellipse: reduce to within one period, since two-body motion is exactly periodic.
@@ -104,18 +103,15 @@ public static class Keplerian<T>
 			}
 		}
 
+		// Vallado's elliptic guess χ₀ = √μ·Δt·α is the eccentric anomaly swept, scaled by √a. Near the
+		// parabola and beyond it the guesses are computed in double: they only have to start the
+		// iteration, which then refines to the storage type's own floor.
 		double conic = double.CreateChecked(alpha * radius);
-		if (conic > NearParabolicBand)
-		{
-			// Vallado's elliptic guess χ₀ = √μ·Δt·α: the eccentric anomaly swept, scaled by √a.
-			initialGuess = math.ToWorkingPrecision(sqrtMu * span * alpha);
-		}
-		else
-		{
-			initialGuess = T.CreateChecked(conic < -NearParabolicBand
+		T initialGuess = conic > NearParabolicBand
+			? math.ToWorkingPrecision(sqrtMu * span * alpha)
+			: T.CreateChecked(conic < -NearParabolicBand
 				? HyperbolicGuess(double.CreateChecked(radius), double.CreateChecked(radialDot), double.CreateChecked(alpha), double.CreateChecked(mu), double.CreateChecked(span))
 				: ParabolicGuess(double.CreateChecked(radius), double.CreateChecked(radialDot), double.CreateChecked(alpha), double.CreateChecked(mu), double.CreateChecked(span)));
-		}
 
 		T scaledTime = math.ToWorkingPrecision(sqrtMu * span);
 		KeplerSolution<T> solution = KeplerSolvers<T>.UniversalVariable(radius, radialTerm, alpha, scaledTime, initialGuess, math);
