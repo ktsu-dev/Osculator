@@ -83,14 +83,17 @@ public sealed class ForceModelTests
 			    2    2  0.243914352398D-05 -0.140016683654D-05  0.53739154D-10  0.54353269D-10
 			    3    0  0.957254173792D-06  0.000000000000D+00  0.18094237D-10  0.00000000D+00
 			""";
-		GravityField field = Egm96.Parse(new StringReader(Text), 2);
+		using StringReader reader = new(Text);
+		GravityField field = Egm96.Parse(reader, 2);
 		Assert.AreEqual(-0.484165371736e-3, Parse(field.Cosine(2, 0)));
 		Assert.AreEqual(-0.140016683654e-5, Parse(field.Sine(2, 2)));
 		Assert.AreEqual("0", field.Cosine(2, 1), "a pair the file leaves out is zero");
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => field.Cosine(3, 0), "degree 3 was above the requested maximum");
 
-		Assert.ThrowsExactly<FormatException>(() => Egm96.Parse(new StringReader("2 3 1.0 1.0"), 2), "order above degree");
-		Assert.ThrowsExactly<FormatException>(() => Egm96.Parse(new StringReader("2 0 x 1.0"), 2), "not a number");
+		using StringReader orderAboveDegree = new("2 3 1.0 1.0");
+		using StringReader notANumber = new("2 0 x 1.0");
+		Assert.ThrowsExactly<FormatException>(() => Egm96.Parse(orderAboveDegree, 2), "order above degree");
+		Assert.ThrowsExactly<FormatException>(() => Egm96.Parse(notANumber, 2), "not a number");
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Egm96.Load(71));
 	}
 
