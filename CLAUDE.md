@@ -374,7 +374,13 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
    without saying so, is the result.
 3. Frame transforms against IERS test vectors.
-4. SP3 interpolation by held-out epochs.
+4. SP3 interpolation by held-out epochs. **Passing**, on committed excerpts of a real IGS GPS orbit
+   and a real ILRS LAGEOS-1 orbit (`Sp3InterpolatorTests`). Dropping each epoch and interpolating it
+   back with the tenth-order Lagrange polynomial, where the window can be centred: 6.0 mm worst for
+   GPS at 15-minute spacing, 1.5 mm for LAGEOS-1 at 2 minutes — which is the file's own millimetre
+   resolution, not the polynomial. Within half a window of either end the window cannot be centred
+   and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
+   Thirty-digit arithmetic moves none of these by more than a few nanometres.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
 6. Benchmarks in CI, per storage type per propagator.
