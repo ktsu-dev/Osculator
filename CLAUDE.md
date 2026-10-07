@@ -263,7 +263,7 @@ From the spec. `Osculator.Core` is generic over the storage type and contains no
 | `Osculator.Data` | CelesTrak, Space-Track, CDDIS/ILRS SP3, JPL Horizons clients plus the disk cache |
 | `Osculator.Numerics.Precise` | `PreciseStorageMath`: `IStorageMath<PreciseNumber>` at a chosen working precision |
 | `Osculator.Core/Numerics` | `DecimalMath`: sqrt, sin, cos, atan2, exp, log and pow for `decimal`, which the base library has none of |
-| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package |
+| `Osculator.Storage.{Double,Float,Decimal,Precise}` | One-file facades, each referencing one `ktsu.Semantics.Quantities.*` alias package. Each is an `IPropagatorHost`: `Propagate(ElementSet, minutesSinceEpoch)` runs SGP4 in its storage type and returns a non-generic `PropagatedState` (TEME km and km/s as `double`, plus wall-clock). That is the seam every panel calls; never difference two of those states to measure Δ_arith, since both are already rounded to `double` |
 | `Osculator.App` | `ktsu.ImGui.App` UI |
 | `Osculator.Tests` | MSTest, including the Vallado SGP4 verification suite |
 | `Osculator.Benchmarks` | BenchmarkDotNet, cost per propagation per storage type |
