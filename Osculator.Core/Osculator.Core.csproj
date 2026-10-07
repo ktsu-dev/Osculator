@@ -12,4 +12,10 @@
     <PackageReference Include="ktsu.Semantics.Quantities" />
     <PackageReference Include="Polyfill" PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- EGM96 to degree 70, read by Egm96.Load. Bundled because a force model that needs a network
+         or a file path to construct is not one a test or an offline run can use. -->
+    <EmbeddedResource Include="Forces\Data\egm96-to70.txt" LogicalName="ktsu.Osculator.Core.Forces.Data.egm96-to70.txt" />
+  </ItemGroup>
 </Project>

@@ -209,6 +209,22 @@ a month, and the table would blame it on the arithmetic. The pair's coefficient 
 independently of the code: its error estimate falls as h⁸ (measured 7.92, 7.98), and changing one
 digit of one coefficient drops it to 5.5.
 
+**The force model beyond two-body is in** (`Osculator.Core/Forces/`): EGM96 harmonics to any
+degree and order up to the bundled 70 (`SphericalHarmonicGravity<T>`, the full 360 reads through
+`GravityField.Parse`), the piecewise exponential atmosphere with drag against co-rotating air,
+cannonball radiation pressure with a cylindrical shadow, and Sun and Moon third-body terms over an
+`IBodyEphemeris<T>` that `Osculator.Data/Forces/HorizonsBodyEphemeris` fills from Horizons. Each is
+an `IForceModel<T>`, summed and switched individually by `CombinedForceModel<T>`. Spec open
+question 4 is settled as **built, not borrowed**: every force has to run in all four storage types,
+and no .NET astrodynamics library is generic over its arithmetic. Measured by `ForceModelTests`:
+the harmonics agree with SHTOOLS, an independent Fortran implementation, to **7e-15** relative at
+every point and truncation tried, and J₂ alone regresses an ISS-like node within **0.23 %** of the
+textbook secular rate. Two arrangements are about arithmetic rather than physics: the third-body
+term uses Battin's F(q), because the direct difference loses **four digits** of a `double` to
+cancellation for the Sun (4.3e-12 against 1.2e-16); and radiation pressure and the third body divide
+in an order that keeps `decimal` out of domain trap 10, which the first version walked into at
+**6e-11** relative.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
