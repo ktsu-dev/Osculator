@@ -252,8 +252,12 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    makes results *worse*, because the model is a fit and the constants are part of the fit.
 3. **SGP4 outputs TEME, not J2000.** True Equator Mean Equinox is a distinct frame. Treating SGP4
    output as ECI/J2000 is the most common bug in amateur trackers and costs 100 m to several km.
-4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000, so one ulp is
-   ~48 µs. That is why the two-part Julian Date exists. In `PreciseNumber` it is exact.
+4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000 lies between 2²¹
+   and 2²², so one ulp is 2⁻³¹ days: **40.2 µs**, measured. The 48 µs usually quoted (this file
+   said it too) is machine epsilon times the date, a bound that overstates the spacing by JD / 2²¹.
+   That is why the two-part Julian Date exists. In `PreciseNumber` it is exact.
+   `JulianDateStaircase` sweeps it and `JulianDateStaircaseTests` pins the tread and the 31 cm
+   risers it puts on along-track position at ISS speed.
 5. **Residuals belong in RIC/RSW**, not XYZ. Orbital error is overwhelmingly along-track — essentially
    a timing error — and XYZ scrambles that across three axes rotating with the orbit.
 6. **The OMM JSON carries more precision than the two-line text for some fields.** The JSON is
