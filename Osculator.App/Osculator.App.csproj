@@ -13,12 +13,19 @@
     <PackageReference Include="ktsu.ImGui.App" />
     <PackageReference Include="ktsu.ImGui.Widgets" />
     <PackageReference Include="Hexa.NET.ImGui" />
+    <!-- The fuzzy rank behind SearchBoxRanked, called directly so the catalogue ranks once per
+         keystroke rather than once per frame. -->
+    <PackageReference Include="ktsu.TextFilter" />
     <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
          entire integration; no initialization code is needed. -->
     <PackageReference Include="Hexa.NET.ImPlot" />
     <!-- The residual plots take their differences in PreciseNumber, so it is used directly. -->
     <PackageReference Include="ktsu.PreciseNumber" />
     <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Osculator.Data\Osculator.Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
