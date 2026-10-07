@@ -185,7 +185,7 @@ class run twice. Over a million metre-scale residuals with a closed-form answer 
 deliberately not passed through `ToWorkingPrecision` — exact addition grows only by the exponent span
 and the count, not per term — and `ThePreciseSumsAreNotReducedToTheWorkingPrecision` fails if they are.
 
-**Conjunction screening is in the core; its panel is not.** `Osculator.Core/Conjunction/` rejects
+**Conjunction screening is in the core and has a panel.** `Osculator.Core/Conjunction/` rejects
 pairs whose perigee–apogee shells cannot meet, scans the rest for sign changes of `Δr · Δv`, and
 bisects each to a nanominute, with the time, both states and the miss distance all in `T`. On a
 constructed 13.24 m crossing at 2.09 km/s, against 30 digits: `float` is off by **0.82 m**, `double`
@@ -193,6 +193,12 @@ by **1.6e-12 km**, `decimal` by 3e-26 km. The subtraction itself is exact; what 
 states' own absolute rounding as the whole answer, which is the spec's cancellation case.
 `ClosestApproach<T>` keeps the states so storage types can be compared in `T`; never compare two
 `PropagatedState`s for this.
+The panel (`Osculator.App/Panels/ConjunctionScreeningPanel.cs`, logic in `ConjunctionSweep`)
+screens in `double` only, either the selected object against the catalogue or all against all
+among up to 400 objects matched by name; selecting a row re-finds that one approach in all four
+types over a two-minute window around it. Never screen a catalogue in `PreciseNumber`: at
+7,000x `double`'s cost that is days, and the screen is a decision padded by margins, not the
+measurement.
 
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:

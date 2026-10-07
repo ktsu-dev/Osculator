@@ -15,7 +15,7 @@ internal static class Program
 	/// </summary>
 	private static void Main()
 	{
-		using AppShell shell = new(Panels.Register);
+		using AppShell shell = new(Shell.Panels.Register);
 		ImGuiApp.Start(shell.BuildConfig());
 	}
 }
