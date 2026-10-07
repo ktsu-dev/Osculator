@@ -137,12 +137,14 @@ public sealed class Gate2StorageBoundsTests
 
 			worstVelocity = System.Math.Max(worstVelocity, row.VelocityKmPerSecond);
 
-			if (!(row.PositionKm <= positionTolerance))
+			// A NaN component makes the distance NaN, and NaN compares false against everything, so
+			// it is named here rather than left to slip past a plain greater-than.
+			if (double.IsNaN(row.PositionKm) || row.PositionKm > positionTolerance)
 			{
 				failures.Add(string.Create(CultureInfo.InvariantCulture, $"{row.CatalogId} at {row.Minutes} min: position off by {row.PositionKm:E3} km"));
 			}
 
-			if (!(row.VelocityKmPerSecond <= VelocityToleranceKmPerSecond))
+			if (double.IsNaN(row.VelocityKmPerSecond) || row.VelocityKmPerSecond > VelocityToleranceKmPerSecond)
 			{
 				failures.Add(string.Create(CultureInfo.InvariantCulture, $"{row.CatalogId} at {row.Minutes} min: velocity off by {row.VelocityKmPerSecond:E3} km/s"));
 			}
