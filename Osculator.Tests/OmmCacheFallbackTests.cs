@@ -63,7 +63,7 @@ public sealed class OmmCacheFallbackTests
 		using HttpClient http = new(handler, disposeHandler: false);
 		CelesTrakClient client = new(http, new ResponseCache(Path.Join(root, "cache"), TimeSpan.FromHours(4), TimeProvider.System));
 
-		IReadOnlyList<ElementSet> sets = await client.GetObjectAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> sets = (await client.GetObjectAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.AreEqual(new DateTime(2026, 9, 22, 20, 26, 37, 27, DateTimeKind.Utc), sets[0].Epoch);
 	}
@@ -86,7 +86,7 @@ public sealed class OmmCacheFallbackTests
 		clock.Advance(TimeSpan.FromHours(5));
 		handler.Body = badBody;
 
-		IReadOnlyList<ElementSet> afterBadBody = await client.GetObjectAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> afterBadBody = (await client.GetObjectAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(1, afterBadBody);
 		Assert.AreEqual(15.49234213, afterBadBody[0].MeanMotion, "The good copy should have been returned.");
@@ -95,7 +95,7 @@ public sealed class OmmCacheFallbackTests
 		handler.FailWith = new HttpRequestException("no route to host");
 		clock.Advance(TimeSpan.FromHours(5));
 
-		IReadOnlyList<ElementSet> offline = await client.GetObjectAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> offline = (await client.GetObjectAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.AreEqual(15.49234213, offline[0].MeanMotion, "The cache should still hold the good copy.");
 	}
