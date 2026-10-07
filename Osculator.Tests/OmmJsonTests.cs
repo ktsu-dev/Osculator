@@ -4,6 +4,8 @@ namespace ktsu.Osculator.Tests;
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Data;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -67,5 +69,104 @@ public sealed class OmmJsonTests
 
 		Assert.HasCount(1, sets);
 		Assert.AreEqual(25544, sets[0].NoradCatalogId);
+	}
+
+	[TestMethod]
+	[DataRow("MEAN_MOTION")]
+	[DataRow("ECCENTRICITY")]
+	[DataRow("INCLINATION")]
+	[DataRow("RA_OF_ASC_NODE")]
+	[DataRow("ARG_OF_PERICENTER")]
+	[DataRow("MEAN_ANOMALY")]
+	[DataRow("BSTAR")]
+	[DataRow("NORAD_CAT_ID")]
+	[DataRow("EPOCH")]
+	public void Read_RejectsARecordMissingAFieldTheOrbitNeeds(string field)
+	{
+		// An absent property used to deserialize as zero: a mean motion of zero, or an object filed
+		// under catalogue number 0. That passed the CelesTrak client's parse-before-cache check.
+		string missing = Without(IssResponse, field);
+
+		Assert.DoesNotContain($"\"{field}\"", missing, StringComparison.Ordinal);
+		Assert.ThrowsExactly<JsonException>(() => OmmJson.Read(missing));
+	}
+
+	[TestMethod]
+	[DataRow("MEAN_MOTION_DDOT")]
+	[DataRow("REV_AT_EPOCH")]
+	[DataRow("ELEMENT_SET_NO")]
+	[DataRow("MEAN_MOTION_DOT")]
+	public void Read_AcceptsARecordMissingAFieldTheStandardLeavesOptional(string field)
+	{
+		ElementSet iss = OmmJson.Read(Without(IssResponse, field))[0];
+
+		Assert.AreEqual(25544, iss.NoradCatalogId);
+	}
+
+	[TestMethod]
+	public void Read_RejectsTheMinimalRecordTheIssueReported()
+	{
+		Assert.ThrowsExactly<JsonException>(() => OmmJson.Read("""[{"OBJECT_NAME":"X","EPOCH":"2026-09-15T08:51:14.158368","NORAD_CAT_ID":25544}]"""));
+	}
+
+	[TestMethod]
+	[DataRow("2026-09-15T08:51:14.158")]
+	[DataRow("2026-09-15T08:51:14.158000")]
+	[DataRow("2026-09-15T08:51:14.1580000")]
+	[DataRow("2026-09-15T08:51:14.158Z")]
+	[DataRow("2026-09-15T08:51:14.158000+00:00")]
+	[DataRow("2026-09-15T09:51:14.158+01:00")]
+	[DataRow("2026-09-15T03:51:14.158-05:00")]
+	public void Read_AcceptsAnyIsoSpellingOfTheSameEpoch(string epoch)
+	{
+		ElementSet iss = OmmJson.Read(WithEpoch(IssResponse, epoch))[0];
+
+		Assert.AreEqual(DateTimeKind.Utc, iss.Epoch.Kind);
+		Assert.AreEqual(new DateTime(2026, 9, 15, 8, 51, 14, 158, DateTimeKind.Utc), iss.Epoch);
+	}
+
+	[TestMethod]
+	public void Read_KeepsSevenFractionalDigitsOfTheEpoch()
+	{
+		ElementSet iss = OmmJson.Read(WithEpoch(IssResponse, "2026-09-15T08:51:14.1583681"))[0];
+
+		Assert.AreEqual(new DateTime(2026, 9, 15, 8, 51, 14, DateTimeKind.Utc).AddTicks(1583681), iss.Epoch);
+	}
+
+	[TestMethod]
+	[DataRow("2026-09-15")]
+	[DataRow("15/09/2026 08:51:14")]
+	[DataRow("2026-09-15T08:51:14.")]
+	[DataRow("2026-09-15T08:51:14.158368123")]
+	[DataRow("not a date")]
+	public void Read_RejectsAMalformedEpochAsJson(string epoch)
+	{
+		// JsonException, not FormatException: it is the one failure Read documents, and the one the
+		// CelesTrak client's stale-copy fallback catches.
+		JsonException error = Assert.ThrowsExactly<JsonException>(() => OmmJson.Read(WithEpoch(IssResponse, epoch)));
+
+		Assert.Contains("EPOCH", error.Message, StringComparison.Ordinal);
+	}
+
+	/// <summary>Removes one property from the fixture.</summary>
+	/// <param name="json">The fixture.</param>
+	/// <param name="field">The property name.</param>
+	/// <returns>The fixture without it.</returns>
+	private static string Without(string json, string field)
+	{
+		JsonArray array = JsonNode.Parse(json)!.AsArray();
+		array[0]!.AsObject().Remove(field);
+		return array.ToJsonString();
+	}
+
+	/// <summary>Replaces the fixture's epoch.</summary>
+	/// <param name="json">The fixture.</param>
+	/// <param name="epoch">The new <c>EPOCH</c> text.</param>
+	/// <returns>The fixture with it.</returns>
+	private static string WithEpoch(string json, string epoch)
+	{
+		JsonArray array = JsonNode.Parse(json)!.AsArray();
+		array[0]!["EPOCH"] = epoch;
+		return array.ToJsonString();
 	}
 }
