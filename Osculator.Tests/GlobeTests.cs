@@ -285,6 +285,7 @@ public sealed class GlobeTests
 	{
 		Assert.AreEqual(0.0, ResidualColorScale.Position(0.0));
 		Assert.AreEqual(0.0, ResidualColorScale.Position(1e-20));
+		Assert.AreEqual(0.0, ResidualColorScale.Position(double.NaN));
 		Assert.AreEqual(1.0, ResidualColorScale.Position(1e6));
 		Assert.AreEqual(ResidualColorScale.Position(1e-6) - ResidualColorScale.Position(1e-7), ResidualColorScale.Position(10.0) - ResidualColorScale.Position(1.0), 1e-12);
 		Assert.AreEqual(ResidualColorScale.Unavailable, ResidualColorScale.ColorFor(null));

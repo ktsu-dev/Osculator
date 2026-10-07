@@ -47,7 +47,8 @@ internal static class ResidualColorScale
 	/// <returns>A position in [0, 1]; zero and anything below the minimum clamp to 0.</returns>
 	internal static double Position(double kilometers)
 	{
-		if (!(kilometers > 0.0))
+		// NaN is named rather than left to a negated comparison, so the guard reads as what it covers.
+		if (kilometers <= 0.0 || double.IsNaN(kilometers))
 		{
 			return 0.0;
 		}

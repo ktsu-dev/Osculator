@@ -119,7 +119,9 @@ internal readonly record struct MapView(MapProjection Projection, double CentreL
 
 		double centreLatitude = CentreLatitudeDegrees * DegreesToRadians;
 
-		if (rho == 0.0)
+		// The centre itself, where the formula below divides by ρ. Anything this close is the centre at
+		// any image size the panel draws.
+		if (rho < 1e-12)
 		{
 			latitudeDegrees = CentreLatitudeDegrees;
 			longitudeDegrees = WrapDegrees(CentreLongitudeDegrees);
