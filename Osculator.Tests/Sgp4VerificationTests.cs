@@ -4,7 +4,11 @@ namespace ktsu.Osculator.Tests;
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
+using ktsu.Osculator.Numerics.Precise;
+using ktsu.PreciseNumber;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
@@ -89,6 +93,12 @@ public sealed class Sgp4VerificationTests
 	/// perfect — which is exactly the defect this suite caught while it was being written.
 	/// </remarks>
 	private const double VelocityToleranceKmPerSecond = 1e-9;
+
+	/// <summary>The first case in the published set, a near-earth object.</summary>
+	private const int NearEarthCatalogId = 5;
+
+	/// <summary>The half-day-resonant case a quantized epoch hurt most.</summary>
+	private const int HalfDayResonantCatalogId = 22674;
 
 	[TestMethod]
 	public void EveryCase_MatchesThePublishedVectors()
@@ -207,6 +217,88 @@ public sealed class Sgp4VerificationTests
 		Assert.IsGreaterThan(0, byResonance[1], "No synchronous-resonance case ran.");
 		Assert.IsGreaterThan(0, byResonance[2], "No half-day-resonance case ran.");
 	}
+
+	[TestMethod]
+	[DataRow(1.0, 15.5, Sgp4Error.EccentricityOutOfRange, DisplayName = "e = 1")]
+	[DataRow(1.2, 15.5, Sgp4Error.EccentricityOutOfRange, DisplayName = "e > 1")]
+	[DataRow(0.0005, 0.0, Sgp4Error.MeanMotionNotPositive, DisplayName = "mean motion 0")]
+	[DataRow(0.0005, -1.0, Sgp4Error.MeanMotionNotPositive, DisplayName = "mean motion negative")]
+	public void AnElementSetOutsideTheModelIsRefusedTheSameWayInEveryStorageType(double eccentricity, double meanMotion, Sgp4Error expected)
+	{
+		// A two-line set cannot write an eccentricity of one or more, but OMM JSON, the nudged sets the
+		// data term builds and any `with` expression can. double used to report e = 1 as a success
+		// holding NaN, while decimal and PreciseNumber threw on the same input — so a sweep that
+		// skipped the set in one type crashed in another, and the harness's promise that only the
+		// storage type differs did not hold. Each of these must come back as the same error, and none
+		// may throw. A near-earth and a deep-space base are both run, since the two part ways early.
+		foreach (int catalogId in new[] { NearEarthCatalogId, HalfDayResonantCatalogId })
+		{
+			ElementSet outside = CaseFor(catalogId).Elements with { Eccentricity = eccentricity, MeanMotion = meanMotion };
+
+			Assert.AreEqual(expected, ErrorAtEpoch(outside, DoubleStorageMath.Instance), $"double, base {catalogId}");
+			Assert.AreEqual(expected, ErrorAtEpoch(outside, FloatStorageMath.Instance), $"float, base {catalogId}");
+			Assert.AreEqual(expected, ErrorAtEpoch(outside, DecimalStorageMath.Instance), $"decimal, base {catalogId}");
+			Assert.AreEqual(expected, ErrorAtEpoch(outside, new PreciseStorageMath(30)), $"PreciseNumber, base {catalogId}");
+		}
+	}
+
+	[TestMethod]
+	public void FloatOnAHalfDayResonantCaseIsLimitedByItsArithmetic_NotByAQuantizedEpoch()
+	{
+		// The deep-space model's epoch sidereal time sets the phase of the resonance forcing and does
+		// not cancel out of it. Evaluated in float from one Julian date, the epoch was first snapped to
+		// the nearest quarter of a day, and this case — the worst of the half-day resonances — came
+		// out 20.47 km from the published vectors. Sidereal time is now an input shared by every
+		// storage type, and the same arc measures 0.09 km.
+		VerificationSet.Case resonant = CaseFor(HalfDayResonantCatalogId);
+		IReadOnlyList<VerificationSet.Expected> expected = VerificationSet.ReadExpected()[VerificationSet.ReadCases().FindIndex(c => c.Elements.NoradCatalogId == HalfDayResonantCatalogId)];
+		Sgp4Satellite<float> satellite = Sgp4<float>.Initialize(resonant.Elements, FloatStorageMath.Instance);
+
+		Assert.AreEqual(2, satellite.Resonance, "Object 22674 is expected to be the half-day resonance.");
+
+		double worst = 0.0;
+
+		foreach (VerificationSet.Expected row in expected)
+		{
+			Sgp4Result<float> result = Sgp4<float>.Propagate(satellite, (float)row.Minutes, FloatStorageMath.Instance);
+			Assert.IsTrue(result.IsSuccess, $"float refused {HalfDayResonantCatalogId} at {row.Minutes} min: {result.Error}");
+			worst = System.Math.Max(worst, Distance(result.State.X - row.X, result.State.Y - row.Y, result.State.Z - row.Z));
+		}
+
+		Console.WriteLine($"float on {HalfDayResonantCatalogId}: worst {worst:E3} km over {expected.Count} rows");
+
+		// Measured 0.090 km. The bound is a little over twice that, and twenty times below where a
+		// quantized epoch put it.
+		Assert.IsLessThan(0.2, worst);
+	}
+
+	[TestMethod]
+	public void TheWgs72ConstantsAreTheirPublishedLiteralsInEveryStorageType()
+	{
+		// Parsed from the literal per storage type rather than converted from double, so a wide type
+		// starts from the published value and not from double's binary approximation of it.
+		Assert.AreEqual(6378.135m, Wgs72<decimal>.RadiusEarthKm);
+		Assert.AreEqual(398600.8m, Wgs72<decimal>.Mu);
+		Assert.AreEqual(0.001082616m, Wgs72<decimal>.J2);
+		Assert.AreEqual(-0.00000253881m, Wgs72<decimal>.J3);
+		Assert.AreEqual(-0.00000165597m, Wgs72<decimal>.J4);
+
+		Assert.AreEqual(PreciseNumber.Parse("6378.135", CultureInfo.InvariantCulture), Wgs72<PreciseNumber>.RadiusEarthKm);
+		Assert.AreEqual(PreciseNumber.Parse("398600.8", CultureInfo.InvariantCulture), Wgs72<PreciseNumber>.Mu);
+		Assert.AreEqual(PreciseNumber.Parse("0.001082616", CultureInfo.InvariantCulture), Wgs72<PreciseNumber>.J2);
+
+		// float is the literal rounded once to single precision, not rounded to double and again.
+		Assert.AreEqual(float.Parse("0.001082616", CultureInfo.InvariantCulture), Wgs72<float>.J2);
+		Assert.AreEqual(6378.135, Wgs72<double>.RadiusEarthKm);
+	}
+
+	private static VerificationSet.Case CaseFor(int catalogId) =>
+		VerificationSet.ReadCases().Find(c => c.Elements.NoradCatalogId == catalogId)
+			?? throw new InvalidOperationException($"Object {catalogId} is no longer in the verification file.");
+
+	private static Sgp4Error ErrorAtEpoch<T>(ElementSet elements, IStorageMath<T> math)
+		where T : struct, System.Numerics.INumber<T> =>
+		Sgp4<T>.Propagate(Sgp4<T>.Initialize(elements, math), T.Zero, math).Error;
 
 	private static double Distance(double x, double y, double z) => System.Math.Sqrt((x * x) + (y * y) + (z * z));
 }
