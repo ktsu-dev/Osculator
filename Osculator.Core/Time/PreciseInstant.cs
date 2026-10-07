@@ -15,7 +15,7 @@ using ktsu.Osculator.Core.Frames;
 /// <remarks>
 /// <para>
 /// This is the other side of <see cref="JulianDate"/>. A Julian date is about 2.46 million, so in a
-/// single <see langword="double"/> one unit in the last place is about 48 microseconds, and that is
+/// single <see langword="double"/> one unit in the last place is 2^-31 days, about 40.2 microseconds, and that is
 /// why the two-part form exists. In an arbitrary-precision type the single value is simply wide
 /// enough: adding a sub-microsecond offset to it and taking it away again gives the offset back, and
 /// in <see langword="double"/> it does not. This type deliberately does <em>not</em> split the value,
