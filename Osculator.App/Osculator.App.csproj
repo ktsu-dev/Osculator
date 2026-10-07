@@ -16,6 +16,8 @@
     <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
          entire integration; no initialization code is needed. -->
     <PackageReference Include="Hexa.NET.ImPlot" />
+    <!-- The residual plots take their differences in PreciseNumber, so it is used directly. -->
+    <PackageReference Include="ktsu.PreciseNumber" />
     <PackageReference Include="Polyfill" PrivateAssets="all" />
   </ItemGroup>
 
