@@ -196,6 +196,34 @@ It costs about twelve seconds, because it sweeps the whole verification set twic
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
 
+**The cost of precision is measured too, and M3's performance gate has a budget.**
+`Osculator.Benchmarks/Sgp4Benchmarks.cs` times one initialization plus a one-day propagation in each
+storage type, on a near-earth case (06251) and a half-day-resonant Molniya (21897) from the
+verification set. BenchmarkDotNet, short job, one 2.8 GHz Xeon core:
+
+| | near-earth | deep-space | vs `double` | allocated |
+|---|---|---|---|---|
+| `float` | 0.66 µs | 1.8 µs | **0.6x** | 0.5x |
+| `double` | 1.1 µs | 3.0 µs | 1x | 672 B / 920 B |
+| `decimal` | 91 µs | 344 µs | **80–114x** | 2x |
+| `PreciseNumber` (30 digits) | **9.2 ms** | **21 ms** | **7,100–8,100x** | 1.2 MB / 3.7 MB |
+
+Read it beside the Δ_arith table above. Thirty digits costs four orders of magnitude to move the
+answer by 1.6e-10 km, which is the right price for a reference computed once for the object a user
+selected and the wrong one for anything run over the catalogue. `decimal` costs two orders of
+magnitude and, per trap 10, does not buy the digits it advertises.
+
+**The budget is 100 ms for one `PreciseNumber` initialization plus propagation** — the point past
+which an on-demand reference stops feeling immediate. `PropagationBudget` (run as
+`dotnet run --project Osculator.Benchmarks -c Release -- --budget`) times it on both orbits, fastest
+of five after a warm-up, and exits non-zero above ten times the budget; CI runs it on every push. It
+is a stopwatch rather than BenchmarkDotNet on purpose: the regression it exists for is trap 9, which
+is not a few percent but a propagation that never finishes, and a factor of ten separates that from
+runner noise in both directions. Every run is bounded by the ceiling, warm-up included, so that
+regression fails the step in seconds instead of hanging it. **Mutation-checked**: with
+`ToWorkingPrecision` made the identity, both orbits report "did not finish within 1000 ms" and the
+step fails in about three seconds.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
@@ -394,7 +422,9 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
-6. Benchmarks in CI, per storage type per propagator.
+6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
+   `PreciseNumber` path rather than a timed comparison, because a shared runner measures itself; the
+   per-type figures come from `Sgp4Benchmarks` run locally.
 
 ## Data source etiquette
 
