@@ -27,28 +27,41 @@ five seconds, and reports:
 | | digits | worst vs the published vectors | vs the 30-digit reference |
 |---|---|---|---|
 | `float` | 7 | **55.06 km**, and **0 refusals in 666 rows** | — |
-| `double` | 16 | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **1.6e-10 km**, worst 7.0e-8 km |
-| `decimal` | 28 | 4.2e-7 km | median **5.9e-11 km**, worst 4.0e-7 km |
-| `PreciseNumber` | 30 | **7.3e-8 km** | — |
+| `double` | 16 | 8.1e-9 km (published arcs), 6.8e-8 km (long arc) | median **4.7e-11 km**, worst 3.1e-8 km |
+| `decimal` | 28 | 4.2e-7 km | median **4.8e-11 km**, worst 4.0e-7 km |
+| `PreciseNumber` | 30 | **3.3e-8 km** | — |
+
+**The deep-space epoch sidereal time is a shared input, not part of Δ_arith** (#65). It is evaluated
+once in `double`, exactly as the published model evaluates it, and only the finished angle is
+converted to the storage type, as the element set's own `double` fields are. Both other choices were
+measured and both are wrong. Evaluating it in `T` quantized the epoch before the propagator ran —
+consecutive floats near JD 2.46e6 are six hours apart, and the angle does not cancel out of the
+resonance terms — which put up to 20.5 km on `float`'s half-day-resonant cases (0.09 km now) and was
+70% of `double`'s median against the 30-digit reference (1.6e-10 km before, 4.7e-11 now). Evaluating
+it from the two-part date, the more accurate number, moved `double` itself off the published vectors
+by up to 3.6e-8 km on object 8195: the vectors carry the single-date rounding of that polynomial.
+`float`'s 55.06 km headline is on a non-resonant case and did not move.
 
 Four things to take from that table, all of which the tests assert:
 
-1. **`double`'s arithmetic error is around eight and a half orders of magnitude below the data
-   term.** A median of 1.6e-10 km is a sixth of a millimetre, against a measured **0.056 km** of
-   element-set quantization. This is the repository's central claim and both sides of it are now
-   numbers. It used to read "around ten orders" against "0.3 to 3 km of element-set quantization";
-   that was a projection, the quantization has since been measured at a twentieth of it, and the
-   claim survives comfortably either way. See below.
+1. **`double`'s arithmetic error is around nine orders of magnitude below the data term.** A median
+   of 4.7e-11 km is a twentieth of a millimetre, against a measured **0.056 km** of element-set
+   quantization. This is the repository's central claim and both sides of it are now numbers. It
+   used to read "around ten orders" against "0.3 to 3 km of element-set quantization"; that was a
+   projection, the quantization has since been measured at a twentieth of it, and the claim survives
+   comfortably either way. See below.
 2. **`float` fails silently.** 55 km out and not one row reported an error: the model's error codes
    for an eccentricity or mean motion out of range are never tripped. It returns a confident wrong
    answer, which is the expensive failure mode.
-3. **Thirty digits agrees with the published vectors *nine times worse* than `double` does.** Not a
+3. **Thirty digits agrees with the published vectors *four times worse* than `double` does.** Not a
    defect — the precise run is the more correct one. The published vectors were computed in
    `double`, so agreeing with them closely is a property of making the same rounding errors. If
    precision were the limiting factor, a 30-digit run would agree to 1e-30 km.
-4. **`decimal`'s twelve extra digits buy a factor of 2.8, and cost a factor of 5.6.** Better than
-   `double` at the median, worse at the extreme, and nowhere near the twelve orders of magnitude the
-   digit counts suggest. See domain trap 11 for why.
+4. **`decimal`'s twelve extra digits buy nothing, and cost a factor of 12.6.** Level with `double`
+   at the median, an order of magnitude worse at the extreme, and nowhere near the twelve orders of
+   magnitude the digit counts suggest. It read "a factor of 2.8 better at the median" until the
+   epoch sidereal time was shared; that advantage was `double`'s own single-date evaluation of one
+   angle, which `decimal` did not share. See domain trap 10 for why.
 
 **M2's data layer is in.** `Osculator.Data/CelesTrak/` holds a client, a response cache and a
 snapshot store. The cache is the part with an obligation attached rather than a preference —
@@ -182,8 +195,8 @@ checks the harness rather than the result. Two claims:
 
 The first is what makes every other number in the comparison mean anything. A thirty-digit run is
 not exact arithmetic, it is thirty-digit arithmetic; if its own error were anywhere near the
-1.6e-10 km it is used to measure, the central claim would be measuring the reference rather than
-`double`. It is **eleven orders below** that, so it is not.
+4.7e-11 km it is used to measure, the central claim would be measuring the reference rather than
+`double`. It is **ten orders below** that, so it is not.
 
 **The gate has a guard against passing vacuously, and that guard was added because the first
 version would have.** A harness whose precision argument never reached the arithmetic — so that
