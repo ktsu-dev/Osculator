@@ -89,6 +89,7 @@ public static class TleParser
 			MeanAnomaly = Decimal(line2, 43, 8),
 			MeanMotion = Decimal(line2, 52, 11),
 			RevolutionAtEpoch = Integer(line2, 63, 5),
+			Format = ElementSetFormat.Tle,
 		};
 	}
 
