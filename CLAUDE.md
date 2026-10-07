@@ -118,6 +118,14 @@ that the column mapping is right. Today's values come back flagged `IsPrediction
 IERS finalises about a week in arrears, and a forecast's stated uncertainty on UT1 − UTC runs from
 four times the final one to a thousand times it a year out.
 
+**Those uncertainties are carried now, and measured in metres as part of Δ_data.**
+`EarthOrientation` holds the file's sigma columns for the pole and UT1 − UTC; between rows the
+larger neighbour's sigma is reported, and a row with values but no sigma reads NaN rather than zero.
+`Residuals/EarthOrientationTerm` rotates a TEME state to the ITRF with each parameter at ±σ in turn
+and combines them in quadrature, refusing an unknown sigma. At LEO a final row is worth about a
+centimetre, led by UT1 − UTC; a forecast a year out is metres. Without this, once residuals are
+taken in the ITRF, that share would be counted as Δ_model (spec §11).
+
 **The frame layer exists now, and it is honest about where it stops.** `Osculator.Core/Frames/`
 rotates TEME into the Earth-fixed frame and converts that to geodetic latitude, longitude and
 altitude. `PefState<T>` remains the named intermediate — TEME → PEF is the sidereal rotation, PEF →
@@ -154,6 +162,15 @@ states into the reference state's RIC/RSW frame. Nothing in the dimensions catch
 axis order — a cross product and its negation have identical dimensions — so all three conventions
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
+
+**Residual statistics are accumulated in the storage type, with no compensation.**
+`ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
+`ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
+class run twice. Over a million metre-scale residuals with a closed-form answer of exactly
+333,833.5 km², `PreciseNumber` returns every digit and naive `double` summation returns
+333,833.49999995285: a relative error of **1.4e-13, about three digits lost**. The sums are
+deliberately not passed through `ToWorkingPrecision` — exact addition grows only by the exponent span
+and the count, not per term — and `ThePreciseSumsAreNotReducedToTheWorkingPrecision` fails if they are.
 
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
@@ -208,6 +225,34 @@ error. And μ is 398600.4375 rather than EGM96's 398600.4418, because only the f
 a month, and the table would blame it on the arithmetic. The pair's coefficient table was verified
 independently of the code: its error estimate falls as h⁸ (measured 7.92, 7.98), and changing one
 digit of one coefficient drops it to 5.5.
+
+**The cost of precision is measured too, and M3's performance gate has a budget.**
+`Osculator.Benchmarks/Sgp4Benchmarks.cs` times one initialization plus a one-day propagation in each
+storage type, on a near-earth case (06251) and a half-day-resonant Molniya (21897) from the
+verification set. BenchmarkDotNet, short job, one 2.8 GHz Xeon core:
+
+| | near-earth | deep-space | vs `double` | allocated |
+|---|---|---|---|---|
+| `float` | 0.66 µs | 1.8 µs | **0.6x** | 0.5x |
+| `double` | 1.1 µs | 3.0 µs | 1x | 672 B / 920 B |
+| `decimal` | 91 µs | 344 µs | **80–114x** | 2x |
+| `PreciseNumber` (30 digits) | **9.2 ms** | **21 ms** | **7,100–8,100x** | 1.2 MB / 3.7 MB |
+
+Read it beside the Δ_arith table above. Thirty digits costs four orders of magnitude to move the
+answer by 1.6e-10 km, which is the right price for a reference computed once for the object a user
+selected and the wrong one for anything run over the catalogue. `decimal` costs two orders of
+magnitude and, per trap 10, does not buy the digits it advertises.
+
+**The budget is 100 ms for one `PreciseNumber` initialization plus propagation** — the point past
+which an on-demand reference stops feeling immediate. `PropagationBudget` (run as
+`dotnet run --project Osculator.Benchmarks -c Release -- --budget`) times it on both orbits, fastest
+of five after a warm-up, and exits non-zero above ten times the budget; CI runs it on every push. It
+is a stopwatch rather than BenchmarkDotNet on purpose: the regression it exists for is trap 9, which
+is not a few percent but a propagation that never finishes, and a factor of ten separates that from
+runner noise in both directions. Every run is bounded by the ceiling, warm-up included, so that
+regression fails the step in seconds instead of hanging it. **Mutation-checked**: with
+`ToWorkingPrecision` made the identity, both orbits report "did not finish within 1000 ms" and the
+step fails in about three seconds.
 
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
@@ -407,14 +452,22 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
 4. SP3 interpolation by held-out epochs.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
-6. Benchmarks in CI, per storage type per propagator.
+6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
+   `PreciseNumber` path rather than a timed comparison, because a shared runner measures itself; the
+   per-type figures come from `Sgp4Benchmarks` run locally.
 
 ## Data source etiquette
 
 Every client caches to disk and works offline from cache. This is enforced, not advisory:
 
 - **CelesTrak** asks for caching and infrequent refetch in its usage guidelines.
-- **Space-Track** limits are hard — under 30 requests/minute and 300/hour.
+- **Space-Track** limits are hard — under 30 requests/minute and 300/hour. `SpaceTrackRateLimiter`
+  enforces 29 and 299 over sliding windows, counts the login, and refuses rather than queues; the
+  ceilings can be lowered but not raised. `SpaceTrackClient` also refuses a cache shorter than an
+  hour, because Space-Track asks that `gp` be queried no more often than that. The password is read
+  from the OS credential store by `OsCredentialStore` (Credential Manager, Keychain, Secret Service),
+  whose remarks give the one command per platform that stores it. The client's tests run against a
+  fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
   in this repository.
 
