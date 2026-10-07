@@ -117,34 +117,74 @@ public static class OmmJson
 	}
 
 	/// <summary>
+	/// Every spelling of an ISO-8601 instant the reader accepts: whole seconds or a fraction of one
+	/// to seven digits, each with no designator, <c>Z</c>, or a numeric offset (<c>K</c> matches all
+	/// three). Seven digits is the resolution of a <see cref="DateTime"/> tick.
+	/// </summary>
+	private static readonly string[] EpochFormats =
+	[
+		"yyyy-MM-ddTHH:mm:ssK",
+		"yyyy-MM-ddTHH:mm:ss.fK",
+		"yyyy-MM-ddTHH:mm:ss.ffK",
+		"yyyy-MM-ddTHH:mm:ss.fffK",
+		"yyyy-MM-ddTHH:mm:ss.ffffK",
+		"yyyy-MM-ddTHH:mm:ss.fffffK",
+		"yyyy-MM-ddTHH:mm:ss.ffffffK",
+		"yyyy-MM-ddTHH:mm:ss.fffffffK",
+	];
+
+	/// <summary>
 	/// Reads an OMM record's epoch, which the standard writes as an ISO-8601 instant.
 	/// </summary>
 	/// <param name="record">The record.</param>
 	/// <returns>The epoch, in UTC.</returns>
-	/// <exception cref="JsonException">The record carried no <c>EPOCH</c>.</exception>
-	private static DateTime EpochOf(OmmRecord record) => DateTime.ParseExact(
-		record.Epoch ?? throw new JsonException("Element set carried no EPOCH."),
-		["yyyy-MM-ddTHH:mm:ss.ffffff", "yyyy-MM-ddTHH:mm:ss.ffffffZ", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ssZ"],
-		CultureInfo.InvariantCulture,
-		DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+	/// <exception cref="JsonException">The record carried no <c>EPOCH</c>, or one that is not an ISO-8601 instant.</exception>
+	/// <remarks>
+	/// CelesTrak writes six fractional digits and no designator, but nothing in the standard fixes
+	/// either, and a proxy or another distributor may write three digits or <c>+00:00</c>. A failure
+	/// is raised as <see cref="JsonException"/> rather than <see cref="FormatException"/> because
+	/// that is the one exception <see cref="Read"/> documents, and the CelesTrak client's
+	/// stale-copy fallback catches exactly it: anything else escapes and loses the good cached set.
+	/// </remarks>
+	private static DateTime EpochOf(OmmRecord record)
+	{
+		string text = record.Epoch ?? throw new JsonException("Element set carried no EPOCH.");
+
+		return DateTimeOffset.TryParseExact(
+			text,
+			EpochFormats,
+			CultureInfo.InvariantCulture,
+			DateTimeStyles.AssumeUniversal,
+			out DateTimeOffset epoch)
+			? epoch.UtcDateTime
+			: throw new JsonException($"Element set's EPOCH '{text}' is not an ISO-8601 instant.");
+	}
 
 	/// <summary>
 	/// The wire shape. Internal so its members need no public documentation, and so the mapping to
 	/// <see cref="ElementSet"/> stays the only way in.
 	/// </summary>
+	/// <remarks>
+	/// Every field SGP4 or the catalogue cannot do without is <see cref="JsonRequiredAttribute"/>.
+	/// Without it an absent property deserializes as zero, and a truncated or reshaped body that
+	/// still carries an <c>EPOCH</c> reads as an element set with a mean motion of zero, filed under
+	/// object 0 — which passes the CelesTrak client's parse-before-cache check and replaces a good
+	/// cached copy. <c>MEAN_MOTION_DDOT</c>, <c>REV_AT_EPOCH</c> and <c>ELEMENT_SET_NO</c> stay
+	/// optional, as the standard has them, and so does <c>MEAN_MOTION_DOT</c>, which SGP4 never reads.
+	/// </remarks>
 	internal sealed class OmmRecord
 	{
 		[JsonPropertyName("OBJECT_NAME")] public string? ObjectName { get; set; }
 		[JsonPropertyName("OBJECT_ID")] public string? ObjectId { get; set; }
-		[JsonPropertyName("EPOCH")] public string? Epoch { get; set; }
-		[JsonPropertyName("MEAN_MOTION")] public double MeanMotion { get; set; }
-		[JsonPropertyName("ECCENTRICITY")] public double Eccentricity { get; set; }
-		[JsonPropertyName("INCLINATION")] public double Inclination { get; set; }
-		[JsonPropertyName("RA_OF_ASC_NODE")] public double RaOfAscNode { get; set; }
-		[JsonPropertyName("ARG_OF_PERICENTER")] public double ArgOfPericenter { get; set; }
-		[JsonPropertyName("MEAN_ANOMALY")] public double MeanAnomaly { get; set; }
-		[JsonPropertyName("NORAD_CAT_ID")] public int NoradCatalogId { get; set; }
-		[JsonPropertyName("BSTAR")] public double BStar { get; set; }
+		[JsonPropertyName("EPOCH"), JsonRequired] public string? Epoch { get; set; }
+		[JsonPropertyName("MEAN_MOTION"), JsonRequired] public double MeanMotion { get; set; }
+		[JsonPropertyName("ECCENTRICITY"), JsonRequired] public double Eccentricity { get; set; }
+		[JsonPropertyName("INCLINATION"), JsonRequired] public double Inclination { get; set; }
+		[JsonPropertyName("RA_OF_ASC_NODE"), JsonRequired] public double RaOfAscNode { get; set; }
+		[JsonPropertyName("ARG_OF_PERICENTER"), JsonRequired] public double ArgOfPericenter { get; set; }
+		[JsonPropertyName("MEAN_ANOMALY"), JsonRequired] public double MeanAnomaly { get; set; }
+		[JsonPropertyName("NORAD_CAT_ID"), JsonRequired] public int NoradCatalogId { get; set; }
+		[JsonPropertyName("BSTAR"), JsonRequired] public double BStar { get; set; }
 		[JsonPropertyName("MEAN_MOTION_DOT")] public double MeanMotionDot { get; set; }
 		[JsonPropertyName("MEAN_MOTION_DDOT")] public double MeanMotionDdot { get; set; }
 		[JsonPropertyName("REV_AT_EPOCH")] public int RevAtEpoch { get; set; }
