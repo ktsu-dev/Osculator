@@ -238,6 +238,27 @@ is written against the open generics (`Position3D<T>`, `Length<T>`, `Duration<T>
 `Osculator.App`, which displays all four side by side. The four facade projects are each one file
 long and are where the alias packages are actually demonstrated.
 
+### The application shell
+
+`Osculator.App/Shell/` hosts every panel. `AppShell.BuildConfig()` is what `Program` starts and what
+`AppShellTests` drives headlessly, so the tests exercise the real configuration: docking on,
+`ImGuiWidgets.DrawDeferredDocked()` as the only pump (never `DrawDeferred()` as well, which draws
+every dialog twice), and frame rates throttled when unfocused (5), idle for 30 s (10) or hidden (2).
+
+- **Adding a panel is one line.** Derive from `Panel`, override `Title` and `Draw`, and add
+  `registry.Register<YourPanel>();` to `Shell/Panels.cs`. The title is the docked window's identity,
+  so a duplicate is refused at registration.
+- **Long work goes through `Panel.Work`**, a `BackgroundWork` keyed by job: `Run(key, work,
+  onResult)` runs `work` on a worker and delivers `onResult` on the UI thread through
+  `ImGuiApp.Invoker`. Starting a job under a key that is already running cancels the old one, and
+  its result is dropped even if it finishes anyway, which is what a selection change wants.
+- **`DockedWindow` closes a panel whenever `ImGui.Begin` returns false**, and ImGui returns false
+  for a collapsed window and for a docked tab behind another, not only for one the user closed.
+  Tabbing two panels together used to lose the hidden one for good. `Panel` therefore keeps its own
+  `IsOpen`, the registry re-shows every open panel each frame, and a panel counts as closed only
+  when its window was begun, is not skipping items, and still did not draw, which only the close
+  button produces. Remove the guard once [ImGuiApp#600](https://github.com/ktsu-dev/ImGuiApp/issues/600) is fixed.
+
 ## Domain traps
 
 Thirteen things that are easy to get wrong here and expensive to debug.

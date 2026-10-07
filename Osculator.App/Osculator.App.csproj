@@ -13,6 +13,7 @@
     <PackageReference Include="ktsu.ImGui.App" />
     <PackageReference Include="ktsu.ImGui.Widgets" />
     <PackageReference Include="Hexa.NET.ImGui" />
+    <PackageReference Include="ktsu.Invoker" />
     <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
          entire integration; no initialization code is needed. -->
     <PackageReference Include="Hexa.NET.ImPlot" />

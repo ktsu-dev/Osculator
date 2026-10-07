@@ -3,6 +3,7 @@
 namespace ktsu.Osculator.App;
 
 using ktsu.ImGui.App;
+using ktsu.Osculator.App.Shell;
 
 /// <summary>
 /// The application entry point.
@@ -12,9 +13,9 @@ internal static class Program
 	/// <summary>
 	/// Starts the window.
 	/// </summary>
-	private static void Main() => ImGuiApp.Start(new ImGuiAppConfig
+	private static void Main()
 	{
-		Title = "Osculator",
-		OnRender = _ => StorageComparisonPanel.Draw(),
-	});
+		using AppShell shell = new(Panels.Register);
+		ImGuiApp.Start(shell.BuildConfig());
+	}
 }
