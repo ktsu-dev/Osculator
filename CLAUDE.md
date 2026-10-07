@@ -392,7 +392,13 @@ Every client caches to disk and works offline from cache. This is enforced, not 
 - **CelesTrak** asks for caching and infrequent refetch in its usage guidelines.
 - **Space-Track** limits are hard — under 30 requests/minute and 300/hour.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
-  in this repository.
+  in this repository. `Osculator.Data/Cddis/` reads the bearer token from the store under
+  `osculator-earthdata` (Credential Manager, Keychain or the Secret Service; `OsCredentialStore`
+  gives the command for each) and only when a request is about to be made, so a cached week reads
+  with no token and no network. A versioned orbit file is immutable and is never fetched twice; the
+  week's listing is refetched on the cache's window, because a centre can reissue a week. Without
+  a valid token CDDIS redirects to the login page, which ends on a **200 and an HTML form** — the
+  client checks which host answered, not just the status, and nothing is cached until it parses.
 
 ## Code standards
 
