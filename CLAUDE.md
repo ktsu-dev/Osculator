@@ -163,6 +163,15 @@ axis order — a cross product and its negation have identical dimensions — so
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
+**Residual statistics are accumulated in the storage type, with no compensation.**
+`ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
+`ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
+class run twice. Over a million metre-scale residuals with a closed-form answer of exactly
+333,833.5 km², `PreciseNumber` returns every digit and naive `double` summation returns
+333,833.49999995285: a relative error of **1.4e-13, about three digits lost**. The sums are
+deliberately not passed through `ToWorkingPrecision` — exact addition grows only by the exponent span
+and the count, not per term — and `ThePreciseSumsAreNotReducedToTheWorkingPrecision` fails if they are.
+
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
 
