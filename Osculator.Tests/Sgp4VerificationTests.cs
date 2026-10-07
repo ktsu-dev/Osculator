@@ -243,6 +243,29 @@ public sealed class Sgp4VerificationTests
 	}
 
 	[TestMethod]
+	[DataRow(0.97, 0.2, DisplayName = "e = 0.97, 0.2 rev/day")]
+	[DataRow(0.7, 0.05, DisplayName = "e = 0.7, 0.05 rev/day")]
+	public void AnEccentricityTheSecularTermsCarryOutOfRangeIsRefusedInEveryStorageType(double eccentricity, double meanMotion)
+	{
+		// The other eccentricity guard, the one in Propagate rather than Initialize. Nothing in the
+		// published set drives the secular eccentricity out of range, so without this an edit to
+		// that guard keeps every other test passing. A slow, eccentric deep-space orbit does it given
+		// time: the lunar-solar secular rates carry the eccentricity steadily, and a thousand days is
+		// enough to carry these two past one. Deleting the `em >= 1` half of that guard turns both into
+		// a later, different error code, which is what this pins.
+		ElementSet carried = CaseFor(HalfDayResonantCatalogId).Elements with { Eccentricity = eccentricity, MeanMotion = meanMotion };
+		const double ThousandDays = 1440000.0;
+
+		Assert.AreEqual(Sgp4Error.EccentricityOutOfRange, ErrorAt(carried, ThousandDays, DoubleStorageMath.Instance), "double");
+		Assert.AreEqual(Sgp4Error.EccentricityOutOfRange, ErrorAt(carried, (float)ThousandDays, FloatStorageMath.Instance), "float");
+		Assert.AreEqual(Sgp4Error.EccentricityOutOfRange, ErrorAt(carried, (decimal)ThousandDays, DecimalStorageMath.Instance), "decimal");
+		Assert.AreEqual(Sgp4Error.EccentricityOutOfRange, ErrorAt(carried, ThousandDays.ToPreciseNumber(), new PreciseStorageMath(30)), "PreciseNumber");
+
+		// At a day the same element set is fine, so it is the elapsed time doing it.
+		Assert.AreEqual(Sgp4Error.None, ErrorAt(carried, 1440.0, DoubleStorageMath.Instance));
+	}
+
+	[TestMethod]
 	public void FloatOnAHalfDayResonantCaseIsLimitedByItsArithmetic_NotByAQuantizedEpoch()
 	{
 		// The deep-space model's epoch sidereal time sets the phase of the resonance forcing and does
@@ -298,7 +321,11 @@ public sealed class Sgp4VerificationTests
 
 	private static Sgp4Error ErrorAtEpoch<T>(ElementSet elements, IStorageMath<T> math)
 		where T : struct, System.Numerics.INumber<T> =>
-		Sgp4<T>.Propagate(Sgp4<T>.Initialize(elements, math), T.Zero, math).Error;
+		ErrorAt(elements, T.Zero, math);
+
+	private static Sgp4Error ErrorAt<T>(ElementSet elements, T minutes, IStorageMath<T> math)
+		where T : struct, System.Numerics.INumber<T> =>
+		Sgp4<T>.Propagate(Sgp4<T>.Initialize(elements, math), minutes, math).Error;
 
 	private static double Distance(double x, double y, double z) => System.Math.Sqrt((x * x) + (y * y) + (z * z));
 }
