@@ -47,7 +47,7 @@ practitioner would know it within a minute. The defensible result is the decompo
 Five specific, reproducible cases where Δ_arith stops being negligible, and the reason the
 application is worth building:
 
-- **The Julian Date resolution wall.** JD ≈ 2,461,000, and one ulp of that in `double` is ~48 µs. The
+- **The Julian Date resolution wall.** JD ≈ 2,461,000, and one ulp of that in `double` is 40.2 µs. The
   two-part Julian Date — the hack the whole field uses — exists solely because one `double` cannot
   hold the number. Sweep time continuously and the propagated position is a *staircase*.
 - **`float` cannot represent the residual at all.** One ulp at LEO radius is 0.5 m, so comparing

@@ -28,6 +28,8 @@
     <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
          entire integration. -->
     <PackageVersion Include="Hexa.NET.ImPlot" Version="2.2.9" />
+    <!-- The version ktsu.ImGui.Widgets resolves; the catalogue panel ranks with it directly. -->
+    <PackageVersion Include="ktsu.TextFilter" Version="1.5.45" />
   </ItemGroup>
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />

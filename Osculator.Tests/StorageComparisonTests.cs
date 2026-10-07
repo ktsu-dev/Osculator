@@ -99,7 +99,7 @@ public sealed class StorageComparisonTests
 
 		Console.WriteLine($"double against a {ReferenceDigits}-digit reference: median {m.MedianDoubleVsPrecise:E3} km, worst {m.WorstDoubleVsPrecise:E3} km over {m.Rows} rows");
 
-		// Measured: median 1.6e-10 km — a sixth of a millimetre — and 7.0e-8 km at worst over the
+		// Measured: median 4.7e-11 km — a twentieth of a millimetre — and 3.1e-8 km at worst over the
 		// published arcs. The element set's own quantization puts 0.3 to 3 km on the same
 		// propagations. So the arithmetic term is around ten orders of magnitude below the data term,
 		// which is the claim this whole repository exists to check, and it checks out.
@@ -117,27 +117,32 @@ public sealed class StorageComparisonTests
 	}
 
 	[TestMethod]
-	public void TwelveExtraDigitsBuyAFactorOfThree_AndCostAFactorOfFive()
+	public void TwelveExtraDigitsBuyNothing_AndCostAnOrderOfMagnitude()
 	{
 		Measurement m = Measured.Value;
 
 		Console.WriteLine($"decimal vs the {ReferenceDigits}-digit reference: median {m.MedianDecimalVsPrecise:E3} km, worst {m.WorstDecimalVsPrecise:E3} km");
 		Console.WriteLine($"double  vs the {ReferenceDigits}-digit reference: median {m.MedianDoubleVsPrecise:E3} km, worst {m.WorstDoubleVsPrecise:E3} km");
+		Console.WriteLine($"against the published vectors: decimal {m.WorstDecimal:E3} km, double {m.WorstDouble:E3} km");
 
 		// decimal carries twenty-eight significant digits against double's sixteen. If the arithmetic
 		// error scaled with the digit count, it would be better by twelve orders of magnitude.
 		//
-		// Measured: better by a factor of 2.8 at the median (5.9e-11 km against 1.6e-10) and worse by
-		// a factor of 5.6 at the extreme (4.0e-7 km against 7.0e-8). Twelve digits bought under half
-		// an order of magnitude, and lost most of one.
+		// Measured: level with double at the median (4.8e-11 km against 4.7e-11) and worse by a
+		// factor of 12.6 at the extreme (4.0e-7 km against 3.1e-8). Twelve digits bought nothing
+		// typical and lost an order of magnitude at the edge.
+		//
+		// This read "better by 2.8 at the median" until the deep-space epoch sidereal time became an
+		// input shared by every type (#65). Most of double's median used to be one ill-conditioned
+		// evaluation of that angle from a single Julian date, which decimal did not share; with it
+		// shared, the advantage went with it.
 		//
 		// TheExtraDigitsAreNotWhereTheyAreNeeded, below, is why.
-		Assert.IsLessThan(m.MedianDoubleVsPrecise, m.MedianDecimalVsPrecise, "decimal is expected to be typically closer to the reference than double.");
 		Assert.IsGreaterThan(m.WorstDoubleVsPrecise, m.WorstDecimalVsPrecise, "decimal is expected to be further from the reference than double at its worst.");
 
 		// The claim that matters, in a form noise cannot flip: the gain is nothing like the twelve
-		// orders of magnitude the digit counts would predict, or even three.
-		Assert.IsGreaterThan(m.MedianDoubleVsPrecise / 1000.0, m.MedianDecimalVsPrecise);
+		// orders of magnitude the digit counts would predict, or even a factor of two.
+		Assert.IsGreaterThan(m.MedianDoubleVsPrecise / 2.0, m.MedianDecimalVsPrecise);
 	}
 
 	[TestMethod]
@@ -182,7 +187,7 @@ public sealed class StorageComparisonTests
 		//
 		// If arithmetic precision were what limited agreement with the published vectors, a run at
 		// thirty significant digits would agree with them to about 1e-30 km. It does not. Measured,
-		// it agrees to 7.3e-8 km — the same order as double's own 8.1e-9, and in fact nine times
+		// it agrees to 3.3e-8 km — the same order as double's own 8.1e-9, and in fact four times
 		// further away.
 		//
 		// Nothing is wrong with the precise run; it is the more correct of the two. The published
