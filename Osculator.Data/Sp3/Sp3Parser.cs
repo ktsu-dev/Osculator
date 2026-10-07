@@ -129,9 +129,11 @@ public static class Sp3Parser
 					lastPositionSatellite = satellite;
 					lastPositionKept = false;
 
-					// All three exactly zero is the format's "no orbit here". A real orbit passes
-					// through no such point, so the comparison is exact rather than a tolerance.
-					if (x == 0.0 && y == 0.0 && z == 0.0)
+					// All three zero is the format's "no orbit here". The file writes positions to the
+					// millimetre, so anything under half of one on every axis is that marker; a real
+					// orbit passes nowhere near the centre of the Earth.
+					const double HalfLastDigitKm = 5e-7;
+					if (Math.Abs(x) < HalfLastDigitKm && Math.Abs(y) < HalfLastDigitKm && Math.Abs(z) < HalfLastDigitKm)
 					{
 						break;
 					}

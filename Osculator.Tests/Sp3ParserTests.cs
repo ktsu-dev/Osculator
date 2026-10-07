@@ -102,10 +102,10 @@ public sealed class Sp3ParserTests
 		Sp3Record first = l51[0];
 		Assert.AreEqual(-995.887942, first.X);
 		Assert.IsNull(first.ClockMicroseconds);
-		Assert.IsNotNull(first.Velocity);
+		Sp3Velocity velocity = first.Velocity ?? throw new AssertFailedException("The first LAGEOS-1 entry has no velocity.");
 
 		// 28940.073413 decimetres per second is 2.8940073413 km/s.
-		Assert.AreEqual(2.8940073413, first.Velocity.Value.X, 1e-12);
+		Assert.AreEqual(2.8940073413, velocity.X, 1e-12);
 
 		// LAGEOS-1 is in a near-circular orbit at about 12,270 km radius, moving at about 5.7 km/s.
 		// A velocity read in the file's own decimetres would be ten thousand times that.
