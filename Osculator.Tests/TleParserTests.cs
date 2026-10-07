@@ -196,4 +196,131 @@ public sealed class TleParserTests
 
 		Assert.Contains("catalogue number", error.Message, StringComparison.Ordinal);
 	}
+
+	[TestMethod]
+	[DataRow("A0001", 100001)]
+	[DataRow("H9999", 179999)]
+	[DataRow("J0000", 180000)]
+	[DataRow("N0000", 220000)]
+	[DataRow("P0000", 230000)]
+	[DataRow("Z9999", 339999)]
+	public void Parse_DecodesAnAlpha5CatalogueNumber(string field, int expected)
+	{
+		// Catalogue numbers past 99999 do not fit five digits, so the leading digit becomes a
+		// letter. The checksum is recomputed and verified: a letter counts as nothing in it.
+		ElementSet elements = TleParser.Parse(WithCatalogNumber(IssLine1, field), WithCatalogNumber(IssLine2, field));
+
+		Assert.AreEqual(expected, elements.NoradCatalogId);
+	}
+
+	[TestMethod]
+	public void Parse_LeavesANumericCatalogueNumberAsItWas()
+	{
+		ElementSet elements = TleParser.Parse(WithCatalogNumber(IssLine1, "99999"), WithCatalogNumber(IssLine2, "99999"));
+
+		Assert.AreEqual(99999, elements.NoradCatalogId);
+	}
+
+	[TestMethod]
+	[DataRow("I0001")]
+	[DataRow("O0001")]
+	public void Parse_RejectsTheTwoLettersAlpha5Skips(string field)
+	{
+		FormatException error = Assert.ThrowsExactly<FormatException>(
+			() => TleParser.Parse(WithCatalogNumber(IssLine1, field), WithCatalogNumber(IssLine2, field)));
+
+		Assert.Contains("Alpha-5", error.Message, StringComparison.Ordinal);
+	}
+
+	[TestMethod]
+	public void Parse_RejectsALowercaseAlpha5Letter()
+	{
+		Assert.ThrowsExactly<FormatException>(
+			() => TleParser.Parse(WithCatalogNumber(IssLine1, "a0001"), WithCatalogNumber(IssLine2, "a0001")));
+	}
+
+	[TestMethod]
+	public void Parse_ComparesAlpha5CatalogueNumbersByValue()
+	{
+		// A0001 and A0002 differ only by a digit, and both lines are checksum-valid, so only the
+		// pairing check stands between them and one object's orbit under the other's number.
+		FormatException error = Assert.ThrowsExactly<FormatException>(
+			() => TleParser.Parse(WithCatalogNumber(IssLine1, "A0001"), WithCatalogNumber(IssLine2, "A0002")));
+
+		Assert.Contains("100001", error.Message, StringComparison.Ordinal);
+		Assert.Contains("100002", error.Message, StringComparison.Ordinal);
+	}
+
+	[TestMethod]
+	[DataRow(" 01234-4", "  1234-4", 1.234e-6)]
+	[DataRow(" 00234-4", "   234-4", 2.34e-7)]
+	[DataRow("-01234-4", "- 1234-4", -1.234e-6)]
+	public void Parse_ReadsASpacePaddedDragTermAsTheZeroPaddedOne(string zeroPadded, string spacePadded, double expected)
+	{
+		// The mantissa has an assumed point before its first column, so leading spaces are leading
+		// zeros. Scaling by the digits left after trimming read "  1234-4" as ten times " 01234-4",
+		// and the checksum cannot tell the two apart.
+		ElementSet zeros = TleParser.Parse(WithBStar(IssLine1, zeroPadded), IssLine2);
+		ElementSet spaces = TleParser.Parse(WithBStar(IssLine1, spacePadded), IssLine2);
+
+		Assert.AreEqual(expected, zeros.BStar, System.Math.Abs(expected) * 1e-12);
+		Assert.AreEqual(zeros.BStar, spaces.BStar);
+	}
+
+	[TestMethod]
+	public void Parse_ReadsASpacePaddedSecondDerivativeAsTheZeroPaddedOne()
+	{
+		ElementSet zeros = TleParser.Parse(WithMeanMotionDdot(IssLine1, " 01234-4"), IssLine2);
+		ElementSet spaces = TleParser.Parse(WithMeanMotionDdot(IssLine1, "  1234-4"), IssLine2);
+
+		Assert.AreEqual(1.234e-6, zeros.MeanMotionDdot, 1e-18);
+		Assert.AreEqual(zeros.MeanMotionDdot, spaces.MeanMotionDdot);
+	}
+
+	/// <summary>The zero-based column the second derivative of mean motion starts at on line 1.</summary>
+	private const int MeanMotionDdotColumn = 44;
+
+	/// <summary>The zero-based column the drag term starts at on line 1.</summary>
+	private const int BStarColumn = 53;
+
+	/// <summary>Replaces line 1's drag term and recomputes its checksum.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="field">The eight-column field.</param>
+	/// <returns>The edited line.</returns>
+	private static string WithBStar(string line, string field) => WithField(line, BStarColumn, field);
+
+	/// <summary>Replaces line 1's second derivative of mean motion and recomputes its checksum.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="field">The eight-column field.</param>
+	/// <returns>The edited line.</returns>
+	private static string WithMeanMotionDdot(string line, string field) => WithField(line, MeanMotionDdotColumn, field);
+
+	/// <summary>Replaces a line's catalogue number and recomputes its checksum.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="catalogNumber">The five-column catalogue number.</param>
+	/// <returns>The edited line.</returns>
+	private static string WithCatalogNumber(string line, string catalogNumber) => WithField(line, 2, catalogNumber);
+
+	/// <summary>Overwrites a fixed-column field and recomputes the line's checksum digit.</summary>
+	/// <param name="line">The line.</param>
+	/// <param name="start">The zero-based column the field starts at.</param>
+	/// <param name="text">The field, exactly as wide as the columns it replaces.</param>
+	/// <returns>The edited line, still checksum-valid.</returns>
+	private static string WithField(string line, int start, string text)
+	{
+		string edited = string.Concat(line.AsSpan(0, start), text, line.AsSpan(start + text.Length));
+		int sum = 0;
+
+		foreach (char c in edited.AsSpan(0, 68))
+		{
+			sum += c switch
+			{
+				>= '0' and <= '9' => c - '0',
+				'-' => 1,
+				_ => 0,
+			};
+		}
+
+		return string.Concat(edited.AsSpan(0, 68), (sum % 10).ToString(System.Globalization.CultureInfo.InvariantCulture));
+	}
 }

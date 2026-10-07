@@ -27,10 +27,17 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// <para>
 /// <strong>That the harness holds everything but the storage type fixed.</strong> Every type is
 /// initialized from the same <c>ElementSet</c>, whose fields are <see langword="double"/>, so the
-/// inputs are identical by construction and the measured difference is arithmetic. Anything that
-/// leaked a storage-type-specific path into the plumbing — a constant that was not generic, a
-/// conversion through <see langword="double"/> — would show up as a run that does not reproduce
-/// itself exactly.
+/// inputs are identical by construction and the measured difference is arithmetic. Anything
+/// non-deterministic in the plumbing — state carried between runs, an order that depends on
+/// timing — would show up as a run that does not reproduce itself exactly.
+/// </para>
+/// <para>
+/// <strong>Neither check can see the reference computing in <see langword="double"/>.</strong>
+/// A conversion through <see langword="double"/> is deterministic, so two runs reproduce it
+/// identically, and it is shared by the thirty- and forty-digit runs, so it cancels out of the
+/// convergence comparison too — measured: routing four functions through <see langword="double"/>
+/// made that comparison read <em>better</em> (#25). That defect is caught where it can be, against
+/// independently computed digits, in <c>PreciseStorageMathTests</c>.
 /// </para>
 /// <para>
 /// The spec calls this "the trivial invariant". It is trivial to state and it is the load-bearing
@@ -84,9 +91,10 @@ public sealed class ArithmeticErrorGateTests
 	{
 		// Δ_arith(PreciseNumber) ≡ 0, and exactly zero rather than nearly: two runs of the same
 		// storage type at the same precision differ in nothing, so every digit has to agree. A
-		// harness that had picked up a storage-type-specific path — a non-generic constant, a
-		// conversion through double — would land near zero instead of on it, which is the failure
-		// this is shaped to catch.
+		// harness carrying state from one run into the next, or depending on anything but its
+		// inputs, would land near zero instead of on it, which is the failure this is shaped to
+		// catch. It cannot catch a conversion through double: that is deterministic, so both runs
+		// make it identically. PreciseStorageMathTests is what catches that (#25).
 		//
 		// Three cases rather than the whole set, because this claim does not get truer with more
 		// rows and the sweep above already spends the full-set budget. One near-earth, one
