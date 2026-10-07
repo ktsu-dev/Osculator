@@ -401,7 +401,7 @@ internal static class DeepSpace<T>
 
 		T rptim = N(EarthRotationPerMinute);
 		T theta = satellite.Gsto % twoPi;
-		T aonv = math.Pow(nm / Wgs72<T>.Xke(math), two / N(3));
+		T aonv = math.Pow(nm / Wgs72<T>.Xke(math), math.Divide(two, N(3)));
 
 		if (satellite.Resonance == 2)
 		{
