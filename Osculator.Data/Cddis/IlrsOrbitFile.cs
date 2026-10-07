@@ -99,12 +99,14 @@ public sealed partial record IlrsOrbitFile(string Centre, string Satellite, Date
 	{
 		Ensure.NotNull(listing);
 
-		foreach (string word in listing.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-		{
-			// The name can be preceded by a path or surrounded by markup in an HTML listing, so the
-			// pattern is searched for inside each word rather than matched against the whole of it.
-			Match match = NamePattern().Match(word);
+		// The name can be preceded by a path or surrounded by markup in an HTML listing, so the
+		// pattern is searched for inside each word rather than matched against the whole of it.
+		IEnumerable<Match> matches = listing
+			.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+			.Select(word => NamePattern().Match(word));
 
+		foreach (Match match in matches)
+		{
 			if (match.Success
 				&& DateOnly.TryParseExact(match.Groups["date"].Value, "yyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
 			{
