@@ -100,6 +100,23 @@ Four things to take from that, all of which the tests assert:
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
 
+**The frame layer reaches the GCRF now.** `Frames/GcrfFrame.cs` takes TEME to the GCRF and back
+through IAU 1976 precession and IAU 1980 nutation (`Frames/PrecessionNutation.cs`), the FK5
+reduction TEME is defined against. It reproduces the worked example of AIAA 2006-6753 Rev 2 at
+every step (true of date, mean of date, J2000) to the printed digits: 6e-8 km on position, 5e-10
+km/s on velocity. Three things to know before touching it:
+
+- **The instant is TT, and the IERS celestial pole offsets are a required argument.**
+  `CelestialPoleOffsets.Ignored` lands on FK5 J2000 instead of the GCRF, 91 cm away for the
+  example. They are the `dPsi`/`dEps` of the 1980 series, not `finals2000A`'s `dX`/`dY`.
+- **The equation of the equinoxes includes the 1994 kinematic terms by default**, because the
+  paper's numbers do: TEME is PEF less GMST82 and true of date is PEF less GAST, so the angle
+  between them is the whole of GAST − GMST82. Vallado's `teme2eci` drops them;
+  `EquationOfEquinoxes.Geometric` matches that routine, and is 7 cm off the published vector.
+- **The angles are evaluated in `double` and the rotation is built in the storage type**, as with
+  the sidereal angle. So `decimal` and `PreciseNumber` round-trip to zero and agree with `double`
+  to 3e-12 km, the rounding of the angles and no more.
+
 **The frame layer reaches the ITRF now, and gate 3's sign conventions are checked rather than
 recalled.** `Osculator.Data/Iers/` reads the IERS `finals2000A.all.csv` series — open, no account,
 unlike the laser-ranging archives — and supplies the two things the transform could not previously
@@ -318,7 +335,10 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    (μ = 398600.8 km³/s², Rₑ = 6378.135 km, J₂ = 0.001082616). Substituting the "better" WGS-84 values
    makes results *worse*, because the model is a fit and the constants are part of the fit.
 3. **SGP4 outputs TEME, not J2000.** True Equator Mean Equinox is a distinct frame. Treating SGP4
-   output as ECI/J2000 is the most common bug in amateur trackers and costs 100 m to several km.
+   output as ECI/J2000 is the most common bug in amateur trackers. The spec puts the cost at 100 m
+   to several km; measured by `GcrfFrameTests`, that holds only near 2000. TEME turns away from
+   J2000 with precession, so at 10,000 km it is 0.40 km in 2000, 9.8 km in 2004 and **62.8 km in
+   2026**. `GcrfFrame<T>` is the conversion.
 4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000 lies between 2²¹
    and 2²², so one ulp is 2⁻³¹ days: **40.2 µs**, measured. The 48 µs usually quoted (this file
    said it too) is machine epsilon times the date, a bound that overstates the spacing by JD / 2²¹.
