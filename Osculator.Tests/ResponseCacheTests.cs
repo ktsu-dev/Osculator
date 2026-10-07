@@ -29,7 +29,7 @@ public sealed class ResponseCacheTests
 	[DataRow(0)]
 	[DataRow(-60)]
 	[DataRow(1)]
-	[DataRow(119)]
+	[DataRow(59)]
 	public void AWindowShorterThanTheFloorIsRefused(int minutes)
 	{
 		// A zero window made every entry stale and every call a request: an opt-out from a policy

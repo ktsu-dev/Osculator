@@ -58,10 +58,11 @@ using System.Threading.Tasks;
 public sealed class ResponseCache
 {
 	/// <summary>
-	/// The shortest refetch window a cache may be given. CelesTrak recomputes element sets about
-	/// every two hours, so asking more often than that gains nothing.
+	/// The shortest refetch window a cache may be given. Space-Track asks that its <c>gp</c> class
+	/// be queried no more than hourly, and CelesTrak recomputes element sets about every two hours,
+	/// so no source this cache fronts gains anything from being asked more often than this.
 	/// </summary>
-	public static readonly TimeSpan MinimumAllowedAge = TimeSpan.FromHours(2);
+	public static readonly TimeSpan MinimumAllowedAge = TimeSpan.FromHours(1);
 
 	/// <summary>
 	/// How far in the future a stamp may be before it is treated as wrong rather than as fresh.
