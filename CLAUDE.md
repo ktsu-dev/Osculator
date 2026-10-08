@@ -313,6 +313,29 @@ regression fails the step in seconds instead of hanging it. **Mutation-checked**
 `ToWorkingPrecision` made the identity, both orbits report "did not finish within 1000 ms" and the
 step fails in about three seconds.
 
+**The two-body propagator is in, and demonstration 3 measured something other than what the
+spec predicts.** `Keplerian<T>` is the universal-variable (Stumpff) formulation, solved by
+Laguerre–Conway rather than Newton, and validated against a rotation, Kepler's equation, Barker's
+equation and the conserved integrals of a hyperbola. `KeplerSolvers<T>.NaiveNewton` sits beside it
+for the comparison. `KeplerEquationDigitLossTests` runs both near a Molniya perigee (e = 0.74) in all
+four types against a sixty-digit reference:
+
+| | naive Newton | universal variable |
+|---|---|---|
+| `float`, `double`, 30-digit `PreciseNumber` | worst **0.73** digits of position lost | worst **0.57** |
+| `decimal` | **5.3** of 28 digits of E lost at M = 1e-6 | **6.5** digits of position lost |
+
+At e = 0.74 this is **not** catastrophic cancellation: `E − e·sin E` cancels terms in the ratio
+1 : 0.74, which costs half a digit. The loss grows as `1 − e` shrinks — about 1.7 digits at e = 0.99,
+in every type with relative precision alike — and `decimal`'s is domain trap 10 again, its absolute
+precision meeting small intermediates. What the naive solver gets wrong first is its starting guess,
+not its precision: at e = 0.99 `E₀ = M` diverges in `float` at M = 0.1, where the universal solver
+converges everywhere. Two things to know before changing it: the Stumpff series are used for every
+z between −2500 and 4, because for negative z the series has no cancellation at all and a boundary
+at −4 put an eight-ulp seam in the functions; and Newton on the universal equation was replaced
+because it ran away on a near-parabolic orbit, while a hyperbola needs Vallado's logarithmic
+starting guess or a ten-day arc runs out of iterations.
+
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
 ## What this application is
