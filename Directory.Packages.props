@@ -28,6 +28,14 @@
     <!-- ImGuiExtensionManager auto-detects ImPlot by assembly name, so this reference is the
          entire integration. -->
     <PackageVersion Include="Hexa.NET.ImPlot" Version="2.2.9" />
+    <!-- The shell marshals background results through ImGuiApp.Invoker, whose type comes from here.
+         Pinned to the version ktsu.ImGui.App resolves. -->
+    <PackageVersion Include="ktsu.Invoker" Version="1.2.26" />
+    <!-- The shell's tests drive the real application configuration headlessly. Hexa's widgets are
+         referenced directly because the docking tests need the dockspace's id. Both pinned to what
+         ktsu.ImGui.App 3.37.0 resolves. -->
+    <PackageVersion Include="ktsu.ImGui.App.Testing" Version="3.37.0" />
+    <PackageVersion Include="Hexa.NET.ImGui.Widgets" Version="1.2.18" />
     <!-- The version ktsu.ImGui.Widgets resolves; the catalogue panel ranks with it directly. -->
     <PackageVersion Include="ktsu.TextFilter" Version="1.5.45" />
   </ItemGroup>

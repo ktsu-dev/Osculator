@@ -120,13 +120,14 @@ public sealed class SpaceTrackClientTests
 	[TestMethod]
 	public void ACacheShorterThanAnHourIsRefused()
 	{
-		ResponseCache cache = new(root, TimeSpan.FromMinutes(59), new ManualClock(Start));
 		using FakeSpaceTrack server = new();
 		using HttpClient http = new(server, disposeHandler: false);
 
+		// ResponseCache refuses a window under an hour itself now, so the refusal can come from
+		// either constructor; what matters is that no such client can be built.
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SpaceTrackClient(
 			http,
-			cache,
+			new ResponseCache(root, TimeSpan.FromMinutes(59), new ManualClock(Start)),
 			new SpaceTrackRateLimiter(new ManualClock(Start)),
 			new FixedCredentials(new SpaceTrackCredentials(Identity, Password))));
 	}
