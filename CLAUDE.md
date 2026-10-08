@@ -81,15 +81,16 @@ ends earlier than the copy it would replace, because a truncated CSV still parse
 was mutation-checked the same way: reverting any one fails at least one test.
 
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
-every usable case in the verification set, perturbs each element field by half its written step,
-propagates, and combines the eight contributions in quadrature:
+every usable case in the verification set, perturbs each element field by half the step its
+recorded format writes it to, propagates to the same instant, and combines the nine contributions
+in quadrature:
 
 | | 1 day | 3 days | 7 days |
 |---|---|---|---|
-| median over 27 cases | **0.056 km** | — | **0.066 km** |
-| range | 0.010 – 0.388 km | 0.010 – 4.49 km | 0.013 – 4.58 km |
+| median over 27 cases | **0.056 km** | 0.059 km | **0.066 km** |
+| range | 0.011 – 0.388 km | 0.011 – 4.49 km | 0.014 – 4.58 km |
 
-Four things to take from that, all of which the tests assert:
+Five things to take from that, all of which the tests assert:
 
 1. **It is around 0.06 km, not the 0.3–3 km the spec projects.** The projection was out by a factor
    of five to fifty. Note carefully what is and is not measured here: this is the band of element
@@ -109,6 +110,35 @@ Four things to take from that, all of which the tests assert:
    `Sgp4.cs` never reads either field; all of SGP4's drag is B*. They are in every TLE because SGP,
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
+5. **The epoch is in the table now, and it moves the median by 0.01 m.** It was missing while
+   `MeanMotionDot` was present. Half its step is 432 µs, so it contributes the orbital speed times
+   432 µs: 0.5 to 3.8 m at a day, median 1.3 m, never leading and at best fourth. In quadrature that
+   is invisible at three figures — the 1-day median goes 0.05636 → 0.05637 km — and its largest
+   share of any case's total is 31%, on the quietest LEO sets, where it adds about 5%.
+
+**Each element set records the format it was read from**, and the steps follow it
+(`ElementFieldQuantization.For`). OMM carries eccentricity to eight decimals and B* to eight
+significant digits; the epoch is the same in both, because the JSON's microsecond epoch is the
+text's eighth decimal of a day re-rendered — both committed ISS epochs are exact multiples of
+1e-8 day. The table above is the verification set, which is all TLE. An element set built by hand
+defaults to `Tle`, the coarser, so a forgotten format overstates Δ_data rather than understating it.
+
+**The frame layer reaches the GCRF now.** `Frames/GcrfFrame.cs` takes TEME to the GCRF and back
+through IAU 1976 precession and IAU 1980 nutation (`Frames/PrecessionNutation.cs`), the FK5
+reduction TEME is defined against. It reproduces the worked example of AIAA 2006-6753 Rev 2 at
+every step (true of date, mean of date, J2000) to the printed digits: 6e-8 km on position, 5e-10
+km/s on velocity. Three things to know before touching it:
+
+- **The instant is TT, and the IERS celestial pole offsets are a required argument.**
+  `CelestialPoleOffsets.Ignored` lands on FK5 J2000 instead of the GCRF, 91 cm away for the
+  example. They are the `dPsi`/`dEps` of the 1980 series, not `finals2000A`'s `dX`/`dY`.
+- **The equation of the equinoxes includes the 1994 kinematic terms by default**, because the
+  paper's numbers do: TEME is PEF less GMST82 and true of date is PEF less GAST, so the angle
+  between them is the whole of GAST − GMST82. Vallado's `teme2eci` drops them;
+  `EquationOfEquinoxes.Geometric` matches that routine, and is 7 cm off the published vector.
+- **The angles are evaluated in `double` and the rotation is built in the storage type**, as with
+  the sidereal angle. So `decimal` and `PreciseNumber` round-trip to zero and agree with `double`
+  to 3e-12 km, the rounding of the angles and no more.
 
 **The frame layer reaches the ITRF now, and gate 3's sign conventions are checked rather than
 recalled.** `Osculator.Data/Iers/` reads the IERS `finals2000A.all.csv` series — open, no account,
@@ -221,6 +251,21 @@ class run twice. Over a million metre-scale residuals with a closed-form answer 
 333,833.49999995285: a relative error of **1.4e-13, about three digits lost**. The sums are
 deliberately not passed through `ToWorkingPrecision` — exact addition grows only by the exponent span
 and the count, not per term — and `ThePreciseSumsAreNotReducedToTheWorkingPrecision` fails if they are.
+
+**Conjunction screening is in the core and has a panel.** `Osculator.Core/Conjunction/` rejects
+pairs whose perigee–apogee shells cannot meet, scans the rest for sign changes of `Δr · Δv`, and
+bisects each to a nanominute, with the time, both states and the miss distance all in `T`. On a
+constructed 13.24 m crossing at 2.09 km/s, against 30 digits: `float` is off by **0.82 m**, `double`
+by **1.6e-12 km**, `decimal` by 3e-26 km. The subtraction itself is exact; what it does is leave the
+states' own absolute rounding as the whole answer, which is the spec's cancellation case.
+`ClosestApproach<T>` keeps the states so storage types can be compared in `T`; never compare two
+`PropagatedState`s for this.
+The panel (`Osculator.App/Panels/ConjunctionScreeningPanel.cs`, logic in `ConjunctionSweep`)
+screens in `double` only, either the selected object against the catalogue or all against all
+among up to 400 objects matched by name; selecting a row re-finds that one approach in all four
+types over a two-minute window around it. Never screen a catalogue in `PreciseNumber`: at
+7,000x `double`'s cost that is days, and the screen is a decision padded by margins, not the
+measurement.
 
 **Gate 5 passes, and it is the one the headline number rests on.** `ArithmeticErrorGateTests`
 checks the harness rather than the result. Two claims:
@@ -429,7 +474,10 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    (μ = 398600.8 km³/s², Rₑ = 6378.135 km, J₂ = 0.001082616). Substituting the "better" WGS-84 values
    makes results *worse*, because the model is a fit and the constants are part of the fit.
 3. **SGP4 outputs TEME, not J2000.** True Equator Mean Equinox is a distinct frame. Treating SGP4
-   output as ECI/J2000 is the most common bug in amateur trackers and costs 100 m to several km.
+   output as ECI/J2000 is the most common bug in amateur trackers. The spec puts the cost at 100 m
+   to several km; measured by `GcrfFrameTests`, that holds only near 2000. TEME turns away from
+   J2000 with precession, so at 10,000 km it is 0.40 km in 2000, 9.8 km in 2004 and **62.8 km in
+   2026**. `GcrfFrame<T>` is the conversion.
 4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000 lies between 2²¹
    and 2²², so one ulp is 2⁻³¹ days: **40.2 µs**, measured. The 48 µs usually quoted (this file
    said it too) is machine epsilon times the date, a bound that overstates the spacing by JD / 2²¹.
@@ -443,7 +491,8 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    digit and the drag term gains three (five significant digits in the text, eight in the JSON).
    Mean motion and its first derivative are identical. So Δ_data depends on which representation was
    ingested, and mixing the two compares element sets of different precision. `TleParserTests`
-   pins this with the same ISS element set committed in both forms.
+   pins this with the same ISS element set committed in both forms, and `ElementSet.Format` records
+   which one each set came from so the data term can use the right steps.
 7. **SGP4's velocity unit is not its position unit.** Position converts by the Earth's radius;
    velocity by `radius * xke / 60`. Dropping `xke` leaves position perfect and velocity wrong by a
    factor of 13.45 — which is precisely the defect the verification suite caught during M1, and the

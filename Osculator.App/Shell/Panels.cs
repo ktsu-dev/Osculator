@@ -3,6 +3,7 @@
 namespace ktsu.Osculator.App.Shell;
 
 using System.Diagnostics.CodeAnalysis;
+using ktsu.Osculator.App.Panels;
 
 /// <summary>
 /// The one place panels are registered.
@@ -22,5 +23,6 @@ internal static class Panels
 	{
 		registry.Register<StorageComparisonWindow>();
 		registry.Register<global::ktsu.Osculator.App.Panels.ElementInspectorPanel>();
+		registry.Register<ConjunctionScreeningPanel>();
 	}
 }
