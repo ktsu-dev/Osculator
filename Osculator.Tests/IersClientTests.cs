@@ -5,12 +5,15 @@ namespace ktsu.Osculator.Tests;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using ktsu.Osculator.Data.CelesTrak;
 using ktsu.Osculator.Data.Iers;
+using CountingHandler = ktsu.Osculator.Tests.CelesTrakClientTests.CountingHandler;
+using FakeClock = ktsu.Osculator.Tests.CelesTrakClientTests.FakeClock;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 /// <summary>
@@ -64,21 +67,22 @@ public sealed class IersClientTests
 	[TestMethod]
 	public async Task ABadDownloadDoesNotDisplaceAGoodCachedCopy()
 	{
-		// The reason the body is parsed before it is written. A truncated download or a captive
-		// portal's login page is a 200 with a body, and writing it would break every later run —
-		// including the offline path, which is exactly when it would be needed.
+		// The reason the body is parsed before it is written. A captive portal's login page is a 200
+		// with a body, and writing it would break every later run — including the offline path,
+		// which is exactly when it would be needed. A truncated download parses; the test below
+		// covers that one.
 		CountingHandler handler = Transport(IersSample.Csv);
 		FakeClock clock = new(new DateTimeOffset(2026, 9, 24, 0, 0, 0, TimeSpan.Zero));
 		IersClient client = ClientOver(handler, clock, TimeSpan.FromDays(1));
 
-		EarthOrientationTable good = await client.GetTableAsync().ConfigureAwait(false);
+		EarthOrientationTable good = (await client.GetTableAsync().ConfigureAwait(false)).Value;
 
 		Assert.AreEqual(5, good.Count);
 
 		clock.Advance(TimeSpan.FromDays(2));
 		handler.Body = "<html>Sign in to continue</html>";
 
-		EarthOrientationTable afterBadFetch = await client.GetTableAsync().ConfigureAwait(false);
+		EarthOrientationTable afterBadFetch = (await client.GetTableAsync().ConfigureAwait(false)).Value;
 
 		Assert.AreEqual(5, afterBadFetch.Count, "The cached copy should have survived.");
 	}
@@ -95,7 +99,7 @@ public sealed class IersClientTests
 		clock.Advance(TimeSpan.FromDays(30));
 		handler.FailWith = new HttpRequestException("no route to host");
 
-		EarthOrientationTable offline = await client.GetTableAsync().ConfigureAwait(false);
+		EarthOrientationTable offline = (await client.GetTableAsync().ConfigureAwait(false)).Value;
 
 		Assert.AreEqual(5, offline.Count);
 	}
@@ -131,6 +135,110 @@ public sealed class IersClientTests
 		Assert.IsInstanceOfType<HttpRequestException>(failure.InnerException);
 	}
 
+	[TestMethod]
+	public async Task ATruncatedDownloadDoesNotShrinkTheCachedTable()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		FakeClock clock = new(new DateTimeOffset(2026, 9, 24, 0, 0, 0, TimeSpan.Zero));
+		IersClient client = ClientOver(handler, clock, TimeSpan.FromDays(1));
+
+		EarthOrientationTable good = (await client.GetTableAsync().ConfigureAwait(false)).Value;
+
+		// The connection drops partway through a row. What is left keeps the header and two whole
+		// rows, so it parses — it just ends twenty years early, in the real file's terms.
+		clock.Advance(TimeSpan.FromDays(2));
+		handler.Body = IersSample.Csv[..(IersSample.Csv.IndexOf("\n61298;", StringComparison.Ordinal) + 20)];
+
+		Fetched<EarthOrientationTable> online = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreEqual(good.Count, online.Value.Count);
+		Assert.AreEqual(good.LastModifiedJulianDate, online.Value.LastModifiedJulianDate);
+		Assert.IsTrue(online.IsStale, "The good copy is standing in for a download that failed.");
+
+		// And it was not written: the offline path still has the whole table.
+		clock.Advance(TimeSpan.FromDays(30));
+		handler.FailWith = new HttpRequestException("no route to host");
+
+		EarthOrientationTable offline = (await client.GetTableAsync().ConfigureAwait(false)).Value;
+
+		Assert.AreEqual(good.LastModifiedJulianDate, offline.LastModifiedJulianDate);
+	}
+
+	[TestMethod]
+	public async Task OverlappingCallsShareOneDownload()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+		handler.Gate = release.Task;
+		IersClient client = ClientOver(handler, new FakeClock(DateTimeOffset.UnixEpoch), TimeSpan.FromDays(1));
+
+		Task<Fetched<EarthOrientationTable>>[] calls = [.. Enumerable.Range(0, 8).Select(_ => Task.Run(() => client.GetTableAsync()))];
+		await CelesTrakClientTests.WaitForRequestsAsync(handler, 1).ConfigureAwait(false);
+		release.SetResult();
+
+		Fetched<EarthOrientationTable>[] results = await Task.WhenAll(calls).ConfigureAwait(false);
+
+		Assert.AreEqual(1, handler.Requests, "Four megabytes, once.");
+		Assert.IsTrue(results.All(r => r.Value.Count == 5));
+	}
+
+	[TestMethod]
+	public async Task AStaleFallbackSaysSo()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		DateTimeOffset start = new(2026, 9, 24, 0, 0, 0, TimeSpan.Zero);
+		FakeClock clock = new(start);
+		IersClient client = ClientOver(handler, clock, TimeSpan.FromDays(1));
+
+		Fetched<EarthOrientationTable> fresh = await client.GetTableAsync().ConfigureAwait(false);
+
+		clock.Advance(TimeSpan.FromDays(3));
+		handler.FailWith = new HttpRequestException("no route to host");
+
+		Fetched<EarthOrientationTable> stale = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.IsFalse(fresh.IsStale);
+		Assert.IsTrue(stale.IsStale);
+		Assert.AreEqual(start, stale.FetchedAt);
+	}
+
+	[TestMethod]
+	public async Task AFailingServerIsNotAskedOnEveryCall()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		FakeClock clock = new(new DateTimeOffset(2026, 9, 24, 0, 0, 0, TimeSpan.Zero));
+		IersClient client = ClientOver(handler, clock, TimeSpan.FromDays(1));
+
+		await client.GetTableAsync().ConfigureAwait(false);
+		clock.Advance(TimeSpan.FromDays(2));
+		handler.Status = HttpStatusCode.ServiceUnavailable;
+
+		for (int i = 0; i < 5; i++)
+		{
+			await client.GetTableAsync().ConfigureAwait(false);
+		}
+
+		Assert.AreEqual(2, handler.Requests);
+	}
+
+	[TestMethod]
+	public async Task ACacheThatCannotBeWrittenStillReturnsTheTableAndDownloadsItOnce()
+	{
+		CountingHandler handler = Transport(IersSample.Csv);
+		string blocked = Path.Join(root, "blocked");
+		await File.WriteAllTextAsync(blocked, "not a directory").ConfigureAwait(false);
+		HttpClient http = new(handler, disposeHandler: false);
+		owned.Add(http);
+		IersClient client = new(http, new ResponseCache(blocked, TimeSpan.FromDays(1), new FakeClock(DateTimeOffset.UnixEpoch)));
+
+		for (int i = 0; i < 3; i++)
+		{
+			Assert.AreEqual(5, (await client.GetTableAsync().ConfigureAwait(false)).Value.Count);
+		}
+
+		Assert.AreEqual(1, handler.Requests);
+	}
+
 	private CountingHandler Transport(string body)
 	{
 		CountingHandler handler = new(body);
@@ -143,37 +251,5 @@ public sealed class IersClientTests
 		HttpClient http = new(handler, disposeHandler: false);
 		owned.Add(http);
 		return new IersClient(http, new ResponseCache(Path.Join(root, "cache"), window, clock));
-	}
-
-	private sealed class CountingHandler(string body) : HttpMessageHandler
-	{
-		public int Requests { get; private set; }
-
-		public string Body { get; set; } = body;
-
-		public Exception? FailWith { get; set; }
-
-		[System.Diagnostics.CodeAnalysis.SuppressMessage(
-			"Reliability", "CA2000:Dispose objects before losing scope",
-			Justification = "The response is handed to HttpClient, which owns it from here and disposes it.")]
-		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-		{
-			Requests++;
-
-			return FailWith is not null
-				? Task.FromException<HttpResponseMessage>(FailWith)
-				: Task.FromResult(Respond());
-		}
-
-		private HttpResponseMessage Respond() => new(HttpStatusCode.OK) { Content = new StringContent(Body) };
-	}
-
-	private sealed class FakeClock(DateTimeOffset start) : TimeProvider
-	{
-		private DateTimeOffset now = start;
-
-		public override DateTimeOffset GetUtcNow() => now;
-
-		public void Advance(TimeSpan by) => now += by;
 	}
 }

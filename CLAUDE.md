@@ -70,6 +70,16 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
+"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
+path to the network for both clients: overlapping callers for a key share one request, a failed
+request is throttled (the whole window when a stale copy exists, `FailureBackoff` when nothing
+does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
+(1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
+memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
+`IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
+ends earlier than the copy it would replace, because a truncated CSV still parses. Each of those
+was mutation-checked the same way: reverting any one fails at least one test.
+
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
 every usable case in the verification set, perturbs each element field by half its written step,
 propagates, and combines the eight contributions in quadrature:
@@ -394,11 +404,14 @@ Thirteen things that are easy to get wrong here and expensive to debug.
 12. **CelesTrak's `gp.php` sends no `Last-Modified`, `ETag` or `Cache-Control`** — measured against
    the live service, not assumed. So there is no conditional request to make and no server-stated
    freshness to honour: the entire refetch policy is ours, which is exactly why it is tested rather
-   than documented. It also answers an unknown catalogue number with a **200 and the sentence
-   `No GP data found`**, so a successful request is not on its own a successful lookup; left
-   unchecked that reaches the JSON reader as a parse failure, which says nothing about what went
-   wrong. `CelesTrakClient` detects it, raises `CelesTrakException`, and does **not** cache it —
-   otherwise one typo would keep failing for the whole window.
+   than documented. It answers an unknown or decayed catalogue number with a **404 and the
+   sentence `No GP data found`** (it used to be a 200 and the same sentence; checked again
+   2026-10-07), and an unknown group with a **200 and `Invalid query:`**. Both mean the service was
+   reached and answered, which is not the same as unreachable: `CelesTrakClient` classifies the
+   response before checking its status, raises `CelesTrakException`, does **not** cache it — one
+   typo would otherwise keep failing for the whole window — and does **not** serve the stale copy,
+   because last month's elements for an object that has since decayed are a wrong answer rather
+   than a fallback.
 13. **SGP4's reported velocity is not the exact time derivative of its reported position.** Measured
    at about **1.2e-3 km/s** on the first verification case: differencing two propagated positions
    gives a cross-track rate of 9.6e-4 km/s, and the cross-track axis is built from `r × v`, so the
