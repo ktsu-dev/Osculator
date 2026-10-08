@@ -501,7 +501,13 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    the paper by feeding it the paper's rounded instant, not by rounding its own: it evaluates
    GMST from the two parts without ever summing them, rising at every microsecond and within
    8.2e-14 rad of a 50-digit evaluation, where the single-`double` sum was off by up to 1.4e-9 rad.
-4. SP3 interpolation by held-out epochs.
+4. SP3 interpolation by held-out epochs. **Passing**, on committed excerpts of a real IGS GPS orbit
+   and a real ILRS LAGEOS-1 orbit (`Sp3InterpolatorTests`). Dropping each epoch and interpolating it
+   back with the tenth-order Lagrange polynomial, where the window can be centred: 6.0 mm worst for
+   GPS at 15-minute spacing, 1.5 mm for LAGEOS-1 at 2 minutes — which is the file's own millimetre
+   resolution, not the polynomial. Within half a window of either end the window cannot be centred
+   and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
+   Thirty-digit arithmetic moves none of these by more than a few nanometres.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
 6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
@@ -521,7 +527,13 @@ Every client caches to disk and works offline from cache. This is enforced, not 
   whose remarks give the one command per platform that stores it. The client's tests run against a
   fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
-  in this repository.
+  in this repository. `Osculator.Data/Cddis/` reads the bearer token from the store under
+  `osculator-earthdata` (Credential Manager, Keychain or the Secret Service; `OsCredentialStore`
+  gives the command for each) and only when a request is about to be made, so a cached week reads
+  with no token and no network. A versioned orbit file is immutable and is never fetched twice; the
+  week's listing is refetched on the cache's window, because a centre can reissue a week. Without
+  a valid token CDDIS redirects to the login page, which ends on a **200 and an HTML form** — the
+  client checks which host answered, not just the status, and nothing is cached until it parses.
 
 ## Code standards
 
