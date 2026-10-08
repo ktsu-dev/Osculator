@@ -267,7 +267,7 @@ internal static class CataloguePanel
 	/// <returns>The catalogue, in catalogue-number order.</returns>
 	private static Task<CatalogueView> LoadAsync() => Task.Run(async () =>
 	{
-		IReadOnlyList<ElementSet> elements = await Client.Value.GetGroupAsync(Group).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> elements = (await Client.Value.GetGroupAsync(Group).ConfigureAwait(false)).Value;
 
 		return new CatalogueView([.. elements.OrderBy(e => e.NoradCatalogId).Select(e => new CatalogueEntry(e))]);
 	});
