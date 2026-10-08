@@ -4,6 +4,7 @@ namespace ktsu.Osculator.Data.CelesTrak;
 
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -21,8 +22,9 @@ using ktsu.Osculator.Core.Elements;
 /// </para>
 /// <para>
 /// A request that fails falls back to whatever the cache holds at any age, so an application
-/// started without a network shows last week's catalogue rather than an error page. Only a cache
-/// with nothing in it at all lets the failure through.
+/// started without a network shows last week's catalogue rather than an error page, and the result
+/// says it is stale so the application can say so too. Only a cache with nothing in it at all lets
+/// the failure through.
 /// </para>
 /// </remarks>
 /// <param name="http">The transport. Its <see cref="HttpClient.BaseAddress"/> is ignored.</param>
@@ -40,33 +42,42 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 	/// </summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The element sets the service returned, usually exactly one.</returns>
-	/// <exception cref="CelesTrakException">The request failed and nothing was cached.</exception>
-	public async Task<IReadOnlyList<ElementSet>> GetObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
-		OmmJson.Read(await GetRawObjectAsync(noradCatalogId, cancellationToken).ConfigureAwait(false));
+	/// <returns>
+	/// The element sets the service returned, usually exactly one, and whether they are a stale
+	/// copy served because the service could not be reached.
+	/// </returns>
+	/// <exception cref="CelesTrakException">
+	/// The service has no element set for the object, or the request failed and nothing was cached.
+	/// </exception>
+	/// <exception cref="OperationCanceledException">The caller cancelled.</exception>
+	public async Task<Fetched<IReadOnlyList<ElementSet>>> GetObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
+		(await GetRawObjectAsync(noradCatalogId, cancellationToken).ConfigureAwait(false)).Map(OmmJson.Read);
 
 	/// <summary>
 	/// Reads the current element sets for a named group, such as <c>active</c> or <c>stations</c>.
 	/// </summary>
 	/// <param name="group">The group name.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The element sets the service returned.</returns>
+	/// <returns>The element sets the service returned, and whether they are a stale copy.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="group"/> is null.</exception>
-	/// <exception cref="CelesTrakException">The request failed and nothing was cached.</exception>
-	public async Task<IReadOnlyList<ElementSet>> GetGroupAsync(string group, CancellationToken cancellationToken = default) =>
-		OmmJson.Read(await GetRawGroupAsync(group, cancellationToken).ConfigureAwait(false));
+	/// <exception cref="CelesTrakException">
+	/// The service does not know the group, or the request failed and nothing was cached.
+	/// </exception>
+	/// <exception cref="OperationCanceledException">The caller cancelled.</exception>
+	public async Task<Fetched<IReadOnlyList<ElementSet>>> GetGroupAsync(string group, CancellationToken cancellationToken = default) =>
+		(await GetRawGroupAsync(group, cancellationToken).ConfigureAwait(false)).Map(OmmJson.Read);
 
 	/// <summary>
 	/// Reads one object's element set as the service wrote it, without parsing.
 	/// </summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
+	/// <returns>The response body, and whether it is a stale copy.</returns>
 	/// <remarks>
 	/// The snapshot store archives this rather than a parsed element set, so what it holds is what
 	/// the source served rather than this repository's reading of it.
 	/// </remarks>
-	public Task<string> GetRawObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
+	public Task<Fetched<string>> GetRawObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
 		FetchAsync(FormattableString.Invariant($"CATNR={noradCatalogId}&FORMAT=json"), cancellationToken);
 
 	/// <summary>
@@ -74,9 +85,9 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 	/// </summary>
 	/// <param name="group">The group name.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
+	/// <returns>The response body, and whether it is a stale copy.</returns>
 	/// <exception cref="ArgumentNullException"><paramref name="group"/> is null.</exception>
-	public Task<string> GetRawGroupAsync(string group, CancellationToken cancellationToken = default)
+	public Task<Fetched<string>> GetRawGroupAsync(string group, CancellationToken cancellationToken = default)
 	{
 		Ensure.NotNull(group);
 
@@ -84,56 +95,75 @@ public sealed class CelesTrakClient(HttpClient http, ResponseCache cache)
 	}
 
 	/// <summary>
+	/// Whether a failure means the service could not answer, so the stale copy may stand in.
+	/// </summary>
+	/// <param name="failure">The failure.</param>
+	/// <returns>True for transport failures, error statuses, timeouts and unparseable bodies.</returns>
+	/// <remarks>
+	/// A not-found or an invalid query is not among them: the service was reached and gave an
+	/// answer, and serving last week's copy of an object it now says does not exist would hide it.
+	/// The caller's own cancellation never reaches here, because the shared request does not run on
+	/// the caller's token, so a cancelled task can only be a transport timeout.
+	/// </remarks>
+	private static bool IsUnavailable(Exception failure) =>
+		failure is HttpRequestException or JsonException or TaskCanceledException;
+
+	/// <summary>
 	/// Returns a cached response when one is fresh enough, and otherwise asks the service.
 	/// </summary>
 	/// <param name="query">The query string, which is also the cache key.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
 	/// <returns>The response body.</returns>
-	private async Task<string> FetchAsync(string query, CancellationToken cancellationToken)
+	private async Task<Fetched<string>> FetchAsync(string query, CancellationToken cancellationToken)
 	{
-		string? fresh = Cache.Read(query);
-
-		if (fresh is not null)
-		{
-			return fresh;
-		}
-
-		Uri uri = new(FormattableString.Invariant($"{ElementsEndpoint}?{query}"));
-
 		try
 		{
-			using HttpResponseMessage response = await http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-			response.EnsureSuccessStatusCode();
-
-			string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-			// CelesTrak answers an unknown catalogue number with a body rather than a status code,
-			// so a successful request is not on its own a successful lookup.
-			if (body.StartsWith("No GP data found", StringComparison.OrdinalIgnoreCase))
-			{
-				throw new CelesTrakException(FormattableString.Invariant($"CelesTrak has no element set for {query}."));
-			}
-
-			// Parsed before it is written, as IersClient does, so a proxy error page, a rate-limit
-			// page or a truncated body served as a 200 never displaces a good cached copy.
-			_ = OmmJson.Read(body);
-
-			Cache.Write(query, body);
-			return body;
+			return await Cache.FetchAsync(
+				query,
+				(_, token) => DownloadAsync(query, token),
+				IsUnavailable,
+				cancellationToken).ConfigureAwait(false);
 		}
-		catch (Exception failure) when (
-			failure is HttpRequestException or JsonException
-			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+		catch (ResponseUnavailableException unavailable)
 		{
-			// Last week's elements still propagate. An application that cannot start without a
-			// network is worse than one that starts with something old and says so. A timeout falls
-			// back; the caller's own cancellation does not, because returning stale data from a call
-			// the caller abandoned would report it as a success.
-			string? stale = Cache.ReadAtAnyAge(query);
-
-			return stale ?? throw new CelesTrakException(
+			throw new CelesTrakException(
 				FormattableString.Invariant($"CelesTrak could not be reached for {query} and nothing is cached."),
-				failure);
+				unavailable.InnerException ?? unavailable);
 		}
+	}
+
+	/// <summary>Asks the service once, and classifies what it says.</summary>
+	/// <param name="query">The query string.</param>
+	/// <param name="cancellationToken">Cancels the request.</param>
+	/// <returns>A body that parses as element sets.</returns>
+	private async Task<string> DownloadAsync(string query, CancellationToken cancellationToken)
+	{
+		Uri uri = new(FormattableString.Invariant($"{ElementsEndpoint}?{query}"));
+
+		using HttpResponseMessage response = await http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+		string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+		// Classified before the status is checked. CelesTrak answers an unknown or decayed catalogue
+		// number with a 404 and this sentence (it used to be a 200 and the same sentence), and an
+		// unknown group with a 200 and "Invalid query:". Either way the service was reached and
+		// answered, which is not the same thing as being unreachable.
+		if (response.StatusCode == HttpStatusCode.NotFound
+			|| body.StartsWith("No GP data found", StringComparison.OrdinalIgnoreCase))
+		{
+			throw new CelesTrakException(FormattableString.Invariant($"CelesTrak has no element set for {query}."));
+		}
+
+		if (body.StartsWith("Invalid query", StringComparison.OrdinalIgnoreCase))
+		{
+			throw new CelesTrakException(FormattableString.Invariant($"CelesTrak rejected the query {query}: {body.Trim()}"));
+		}
+
+		response.EnsureSuccessStatusCode();
+
+		// Parsed before it is written, as IersClient does, so a proxy error page, a rate-limit
+		// page or a truncated body served as a 200 never displaces a good cached copy.
+		_ = OmmJson.Read(body);
+
+		return body;
 	}
 }

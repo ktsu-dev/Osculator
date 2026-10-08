@@ -13,6 +13,7 @@
     <PackageReference Include="ktsu.ImGui.App" />
     <PackageReference Include="ktsu.ImGui.Widgets" />
     <PackageReference Include="Hexa.NET.ImGui" />
+    <PackageReference Include="ktsu.Invoker" />
     <!-- The fuzzy rank behind SearchBoxRanked, called directly so the catalogue ranks once per
          keystroke rather than once per frame. -->
     <PackageReference Include="ktsu.TextFilter" />
