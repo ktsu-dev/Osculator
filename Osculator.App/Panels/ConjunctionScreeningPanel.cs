@@ -251,7 +251,7 @@ internal sealed class ConjunctionScreeningPanel : Panel
 		Begin(
 			token =>
 			{
-				IReadOnlyList<ElementSet> objects = loaded ?? Client.Value.GetGroupAsync(CataloguePanel.Group, token).GetAwaiter().GetResult();
+				IReadOnlyList<ElementSet> objects = loaded ?? Client.Value.GetGroupAsync(CataloguePanel.Group, token).GetAwaiter().GetResult().Value;
 				Volatile.Write(ref catalogue, objects);
 
 				if (!group)
