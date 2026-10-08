@@ -70,16 +70,27 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
+"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
+path to the network for both clients: overlapping callers for a key share one request, a failed
+request is throttled (the whole window when a stale copy exists, `FailureBackoff` when nothing
+does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
+(1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
+memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
+`IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
+ends earlier than the copy it would replace, because a truncated CSV still parses. Each of those
+was mutation-checked the same way: reverting any one fails at least one test.
+
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
-every usable case in the verification set, perturbs each element field by half its written step,
-propagates, and combines the eight contributions in quadrature:
+every usable case in the verification set, perturbs each element field by half the step its
+recorded format writes it to, propagates to the same instant, and combines the nine contributions
+in quadrature:
 
 | | 1 day | 3 days | 7 days |
 |---|---|---|---|
-| median over 27 cases | **0.056 km** | — | **0.066 km** |
-| range | 0.010 – 0.388 km | 0.010 – 4.49 km | 0.013 – 4.58 km |
+| median over 27 cases | **0.056 km** | 0.059 km | **0.066 km** |
+| range | 0.011 – 0.388 km | 0.011 – 4.49 km | 0.014 – 4.58 km |
 
-Four things to take from that, all of which the tests assert:
+Five things to take from that, all of which the tests assert:
 
 1. **It is around 0.06 km, not the 0.3–3 km the spec projects.** The projection was out by a factor
    of five to fifty. Note carefully what is and is not measured here: this is the band of element
@@ -99,6 +110,35 @@ Four things to take from that, all of which the tests assert:
    `Sgp4.cs` never reads either field; all of SGP4's drag is B*. They are in every TLE because SGP,
    the model this one replaced, used them. The perturbation is kept in the table rather than
    dropped, because a contribution of exactly zero is the evidence.
+5. **The epoch is in the table now, and it moves the median by 0.01 m.** It was missing while
+   `MeanMotionDot` was present. Half its step is 432 µs, so it contributes the orbital speed times
+   432 µs: 0.5 to 3.8 m at a day, median 1.3 m, never leading and at best fourth. In quadrature that
+   is invisible at three figures — the 1-day median goes 0.05636 → 0.05637 km — and its largest
+   share of any case's total is 31%, on the quietest LEO sets, where it adds about 5%.
+
+**Each element set records the format it was read from**, and the steps follow it
+(`ElementFieldQuantization.For`). OMM carries eccentricity to eight decimals and B* to eight
+significant digits; the epoch is the same in both, because the JSON's microsecond epoch is the
+text's eighth decimal of a day re-rendered — both committed ISS epochs are exact multiples of
+1e-8 day. The table above is the verification set, which is all TLE. An element set built by hand
+defaults to `Tle`, the coarser, so a forgotten format overstates Δ_data rather than understating it.
+
+**The frame layer reaches the GCRF now.** `Frames/GcrfFrame.cs` takes TEME to the GCRF and back
+through IAU 1976 precession and IAU 1980 nutation (`Frames/PrecessionNutation.cs`), the FK5
+reduction TEME is defined against. It reproduces the worked example of AIAA 2006-6753 Rev 2 at
+every step (true of date, mean of date, J2000) to the printed digits: 6e-8 km on position, 5e-10
+km/s on velocity. Three things to know before touching it:
+
+- **The instant is TT, and the IERS celestial pole offsets are a required argument.**
+  `CelestialPoleOffsets.Ignored` lands on FK5 J2000 instead of the GCRF, 91 cm away for the
+  example. They are the `dPsi`/`dEps` of the 1980 series, not `finals2000A`'s `dX`/`dY`.
+- **The equation of the equinoxes includes the 1994 kinematic terms by default**, because the
+  paper's numbers do: TEME is PEF less GMST82 and true of date is PEF less GAST, so the angle
+  between them is the whole of GAST − GMST82. Vallado's `teme2eci` drops them;
+  `EquationOfEquinoxes.Geometric` matches that routine, and is 7 cm off the published vector.
+- **The angles are evaluated in `double` and the rotation is built in the storage type**, as with
+  the sidereal angle. So `decimal` and `PreciseNumber` round-trip to zero and agree with `double`
+  to 3e-12 km, the rounding of the angles and no more.
 
 **The frame layer reaches the ITRF now, and gate 3's sign conventions are checked rather than
 recalled.** `Osculator.Data/Iers/` reads the IERS `finals2000A.all.csv` series — open, no account,
@@ -176,6 +216,33 @@ axis order — a cross product and its negation have identical dimensions — so
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
+**The M2 number exists: the ISS diverges by 10.9 km over a week.** `Divergence<T>` propagates an
+archived element set to a later set's epoch, evaluates the later set at its own epoch, and resolves
+prediction minus reference in the later set's RIC frame. `DivergenceTests` runs it over three real
+ISS element sets committed under `Osculator.Tests/Data/iss-snapshots`, read through `SnapshotStore`
+exactly as the application would:
+
+| pair | horizon | radial | along-track | cross-track | \|r\| |
+|---|---|---|---|---|---|
+| 09-15 08:51 → 09-15 21:14 | 0.52 d | +0.012 km | +0.264 km | +0.100 km | **0.283 km** |
+| 09-15 21:14 → 09-22 20:26 | 6.97 d | +0.154 km | **−10.810 km** | +1.498 km | **10.915 km** |
+
+Three things to take from it, all asserted:
+
+1. **This is Δ_model and Δ_data together, not SGP4's error.** The later set is not truth; it is
+   another fit of the same model, in the same quantized digits. Separating the terms is M5. The
+   week's figure lands inside the spec's projected 5–20 km for Δ_model and is two hundred times the
+   0.056 km of Δ_data measured for one set — so the projection survives first contact with data.
+2. **Along-track dominates both pairs**, but only by 2.6× over cross-track on the half-day pair. It
+   is a property of the data, asserted, not something the frame guarantees.
+3. **`double` and 30 digits agree on the week's divergence to 1.7e-9 km.** Ten orders of magnitude
+   below what is being measured, at the measurement the application actually exists to make.
+
+The rate components use **SGP4's stated velocity** for both states, decided rather than defaulted
+(trap 13): it is what an element-set consumer receives, and the position components do not depend on
+the choice. Three snapshots is what was available to commit — CelesTrak serves only the current set,
+so a longer history has to be accumulated by `SnapshotStore` over time, or seeded from Space-Track.
+
 **Residual statistics are accumulated in the storage type, with no compensation.**
 `ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
 `ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
@@ -233,6 +300,36 @@ It costs about twelve seconds, because it sweeps the whole verification set twic
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
 
+**Demonstration 4 is measured: round-off accumulated over a thirty-day integrated arc.**
+`Cowell<T>` integrates under any `IForceModel<T>` with the Prince–Dormand RK8(7)13M pair
+(`DormandPrince87<T>`), and `CowellRoundOffTests` runs a two-body LEO arc in fixed 120-second steps
+in all four storage types against a thirty-digit run of the same integration:
+
+| day | `float` | `double` | `decimal` |
+|---|---|---|---|
+| 1 | 10.3 km | 3.3e-9 km | 1.2e-18 km |
+| 30 | **8160 km** | **2.4e-6 km** | 2.4e-17 km |
+
+The reference is converged — 30 and 40 digits differ by 6.0e-23 km after a day. Three things to
+take from it, all asserted:
+
+1. **`double`'s month is 2.4 mm, which is what the spec projected, but not for the spec's reason.**
+   The spec had round-off random-walking as √t. It grows as **t^1.94**: a rounding error in the
+   state is an error in the orbit's energy and so its period, and the along-track error from a
+   period error grows as the square of the arc.
+2. **`float` is worse than "confusing".** Projected at 1.3 km for the month; measured at 10 km
+   after one day and most of an orbit after thirty, with nothing reported.
+3. **`decimal` keeps all its digits here**, unlike in SGP4: two-body quantities sit between 1e-3 and
+   1e4, above the crossover of domain trap 10.
+
+Holding everything but the arithmetic fixed takes two choices worth knowing about. The step sequence
+is fixed, because two adaptive runs pick different steps and the difference would include truncation
+error. And μ is 398600.4375 rather than EGM96's 398600.4418, because only the former is exact in
+`float` — the published value would hand the float run a different orbit, worth hundreds of metres
+a month, and the table would blame it on the arithmetic. The pair's coefficient table was verified
+independently of the code: its error estimate falls as h⁸ (measured 7.92, 7.98), and changing one
+digit of one coefficient drops it to 5.5.
+
 **The cost of precision is measured too, and M3's performance gate has a budget.**
 `Osculator.Benchmarks/Sgp4Benchmarks.cs` times one initialization plus a one-day propagation in each
 storage type, on a near-earth case (06251) and a half-day-resonant Molniya (21897) from the
@@ -260,6 +357,29 @@ runner noise in both directions. Every run is bounded by the ceiling, warm-up in
 regression fails the step in seconds instead of hanging it. **Mutation-checked**: with
 `ToWorkingPrecision` made the identity, both orbits report "did not finish within 1000 ms" and the
 step fails in about three seconds.
+
+**The two-body propagator is in, and demonstration 3 measured something other than what the
+spec predicts.** `Keplerian<T>` is the universal-variable (Stumpff) formulation, solved by
+Laguerre–Conway rather than Newton, and validated against a rotation, Kepler's equation, Barker's
+equation and the conserved integrals of a hyperbola. `KeplerSolvers<T>.NaiveNewton` sits beside it
+for the comparison. `KeplerEquationDigitLossTests` runs both near a Molniya perigee (e = 0.74) in all
+four types against a sixty-digit reference:
+
+| | naive Newton | universal variable |
+|---|---|---|
+| `float`, `double`, 30-digit `PreciseNumber` | worst **0.73** digits of position lost | worst **0.57** |
+| `decimal` | **5.3** of 28 digits of E lost at M = 1e-6 | **6.5** digits of position lost |
+
+At e = 0.74 this is **not** catastrophic cancellation: `E − e·sin E` cancels terms in the ratio
+1 : 0.74, which costs half a digit. The loss grows as `1 − e` shrinks — about 1.7 digits at e = 0.99,
+in every type with relative precision alike — and `decimal`'s is domain trap 10 again, its absolute
+precision meeting small intermediates. What the naive solver gets wrong first is its starting guess,
+not its precision: at e = 0.99 `E₀ = M` diverges in `float` at M = 0.1, where the universal solver
+converges everywhere. Two things to know before changing it: the Stumpff series are used for every
+z between −2500 and 4, because for negative z the series has no cancellation at all and a boundary
+at −4 put an eight-ulp seam in the functions; and Newton on the universal equation was replaced
+because it ran away on a near-parabolic orbit, while a hyperbola needs Vallado's logarithmic
+starting guess or a ten-day arc runs out of iterations.
 
 Figures elsewhere in the spec are still **projections**. Do not quote those as results.
 
@@ -354,7 +474,10 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    (μ = 398600.8 km³/s², Rₑ = 6378.135 km, J₂ = 0.001082616). Substituting the "better" WGS-84 values
    makes results *worse*, because the model is a fit and the constants are part of the fit.
 3. **SGP4 outputs TEME, not J2000.** True Equator Mean Equinox is a distinct frame. Treating SGP4
-   output as ECI/J2000 is the most common bug in amateur trackers and costs 100 m to several km.
+   output as ECI/J2000 is the most common bug in amateur trackers. The spec puts the cost at 100 m
+   to several km; measured by `GcrfFrameTests`, that holds only near 2000. TEME turns away from
+   J2000 with precession, so at 10,000 km it is 0.40 km in 2000, 9.8 km in 2004 and **62.8 km in
+   2026**. `GcrfFrame<T>` is the conversion.
 4. **One `double` cannot hold a Julian Date at useful resolution.** JD ≈ 2,461,000 lies between 2²¹
    and 2²², so one ulp is 2⁻³¹ days: **40.2 µs**, measured. The 48 µs usually quoted (this file
    said it too) is machine epsilon times the date, a bound that overstates the spacing by JD / 2²¹.
@@ -368,7 +491,8 @@ Thirteen things that are easy to get wrong here and expensive to debug.
    digit and the drag term gains three (five significant digits in the text, eight in the JSON).
    Mean motion and its first derivative are identical. So Δ_data depends on which representation was
    ingested, and mixing the two compares element sets of different precision. `TleParserTests`
-   pins this with the same ISS element set committed in both forms.
+   pins this with the same ISS element set committed in both forms, and `ElementSet.Format` records
+   which one each set came from so the data term can use the right steps.
 7. **SGP4's velocity unit is not its position unit.** Position converts by the Earth's radius;
    velocity by `radius * xke / 60`. Dropping `xke` leaves position perfect and velocity wrong by a
    factor of 13.45 — which is precisely the defect the verification suite caught during M1, and the
@@ -403,11 +527,14 @@ Thirteen things that are easy to get wrong here and expensive to debug.
 12. **CelesTrak's `gp.php` sends no `Last-Modified`, `ETag` or `Cache-Control`** — measured against
    the live service, not assumed. So there is no conditional request to make and no server-stated
    freshness to honour: the entire refetch policy is ours, which is exactly why it is tested rather
-   than documented. It also answers an unknown catalogue number with a **200 and the sentence
-   `No GP data found`**, so a successful request is not on its own a successful lookup; left
-   unchecked that reaches the JSON reader as a parse failure, which says nothing about what went
-   wrong. `CelesTrakClient` detects it, raises `CelesTrakException`, and does **not** cache it —
-   otherwise one typo would keep failing for the whole window.
+   than documented. It answers an unknown or decayed catalogue number with a **404 and the
+   sentence `No GP data found`** (it used to be a 200 and the same sentence; checked again
+   2026-10-07), and an unknown group with a **200 and `Invalid query:`**. Both mean the service was
+   reached and answered, which is not the same as unreachable: `CelesTrakClient` classifies the
+   response before checking its status, raises `CelesTrakException`, does **not** cache it — one
+   typo would otherwise keep failing for the whole window — and does **not** serve the stale copy,
+   because last month's elements for an object that has since decayed are a wrong answer rather
+   than a fallback.
 13. **SGP4's reported velocity is not the exact time derivative of its reported position.** Measured
    at about **1.2e-3 km/s** on the first verification case: differencing two propagated positions
    gives a cross-track rate of 9.6e-4 km/s, and the cross-track axis is built from `r × v`, so the
@@ -478,8 +605,14 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    specifies expected positions to 10⁻⁸ km. **Passing**, over both the near-earth and the
    deep-space model.
 2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
-   `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
-   without saying so, is the result.
+   The stated tolerances, asserted per row by `Gate2StorageBoundsTests`: `double` 10⁻⁸ km (gate 1),
+   `decimal` and `PreciseNumber` 10⁻⁶ km and 10⁻⁸ km/s, against measured worsts of 4.2e-7 and
+   7.3e-8 km. Neither can meet 10⁻⁸ km and neither should: the published vectors were computed in
+   `double`, so a run that rounds differently — even one that rounds less — disagrees with them by
+   their own precision. `float` was never expected to meet any tolerance — recording where it
+   fails, and that it does so without saying so, is the result. `Sgp4StopPointTests` checks the
+   other edge in `double`, `decimal` and `PreciseNumber`: every case whose published output ends
+   before its stop time is refused, with the expected code, at the next grid step.
 3. Frame transforms against a published reference vector. **Passing.** `FrameCorrectnessTests`
    runs the worked example in Appendix C of Vallado et al. 2006 (AIAA 2006-6753 Rev 2) through
    TEME → PEF and PEF → ITRF separately, so a failure says whether rotation or polar motion broke.
@@ -491,7 +624,13 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    the paper by feeding it the paper's rounded instant, not by rounding its own: it evaluates
    GMST from the two parts without ever summing them, rising at every microsecond and within
    8.2e-14 rad of a 50-digit evaluation, where the single-`double` sum was off by up to 1.4e-9 rad.
-4. SP3 interpolation by held-out epochs.
+4. SP3 interpolation by held-out epochs. **Passing**, on committed excerpts of a real IGS GPS orbit
+   and a real ILRS LAGEOS-1 orbit (`Sp3InterpolatorTests`). Dropping each epoch and interpolating it
+   back with the tenth-order Lagrange polynomial, where the window can be centred: 6.0 mm worst for
+   GPS at 15-minute spacing, 1.5 mm for LAGEOS-1 at 2 minutes — which is the file's own millimetre
+   resolution, not the polynomial. Within half a window of either end the window cannot be centred
+   and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
+   Thirty-digit arithmetic moves none of these by more than a few nanometres.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
 6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
@@ -511,7 +650,13 @@ Every client caches to disk and works offline from cache. This is enforced, not 
   whose remarks give the one command per platform that stores it. The client's tests run against a
   fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
-  in this repository.
+  in this repository. `Osculator.Data/Cddis/` reads the bearer token from the store under
+  `osculator-earthdata` (Credential Manager, Keychain or the Secret Service; `OsCredentialStore`
+  gives the command for each) and only when a request is about to be made, so a cached week reads
+  with no token and no network. A versioned orbit file is immutable and is never fetched twice; the
+  week's listing is refetched on the cache's window, because a centre can reissue a week. Without
+  a valid token CDDIS redirects to the login page, which ends on a **200 and an HTML form** — the
+  client checks which host answered, not just the status, and nothing is cached until it parses.
 
 ## Code standards
 

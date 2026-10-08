@@ -71,7 +71,8 @@ public sealed class OmmJsonWriterTests
 			ElementSet copy = reread[i];
 
 			Assert.IsLessThanOrEqualTo(5L, Math.Abs((copy.Epoch - original.Epoch).Ticks), $"Catalogue number {original.NoradCatalogId}.");
-			Assert.AreEqual(original with { Epoch = copy.Epoch, EpochJulianDate = copy.EpochJulianDate }, copy, $"Catalogue number {original.NoradCatalogId}.");
+			Assert.AreEqual(ElementSetFormat.Omm, copy.Format, "Read back from JSON, so recorded as OMM.");
+			Assert.AreEqual(original with { Epoch = copy.Epoch, EpochJulianDate = copy.EpochJulianDate, Format = copy.Format }, copy, $"Catalogue number {original.NoradCatalogId}.");
 		}
 	}
 

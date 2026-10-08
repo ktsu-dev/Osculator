@@ -184,6 +184,99 @@ public sealed class DataTermTests
 		Assert.IsLessThan(plainSum, combined, "But less than every rounding conspiring.");
 	}
 
+	[TestMethod]
+	public void EveryQuantizedFieldIsPerturbed()
+	{
+		// The epoch was missing from this table once, while MeanMotionDot, which contributes exactly
+		// zero, was in it. Hold the table against the quantization model so a field cannot go
+		// missing again: every fixed-decimal field, plus B*, the one exponential field SGP4 reads.
+		HashSet<string> expected = [.. ElementFieldQuantization.Tle.FixedDecimalSteps.Keys, nameof(ElementSet.BStar)];
+
+		CollectionAssert.AreEquivalent(expected.ToList(), DataTerm.PerturbedFields.ToList());
+
+		IReadOnlyList<DataTerm.Contribution> contributions =
+			DataTerm.Measure(VerificationSet.ReadCases()[0].Elements, 1440.0, DoubleStorageMath.Instance);
+
+		CollectionAssert.AreEquivalent(expected.ToList(), contributions.Select(c => c.Field).ToList());
+	}
+
+	[TestMethod]
+	public void TheEpochContributesHalfItsStepTimesTheOrbitalSpeed()
+	{
+		// Half a step of the epoch is 432 µs. A set whose epoch is 432 µs later puts the satellite
+		// where the written set has it 432 µs earlier, so the contribution is the distance covered in
+		// that time — the orbital speed at the target instant times 432 µs, to first order. A
+		// perturbation that shifted the epoch without shifting the arc would read exactly zero
+		// outside deep space, because SGP4 sees only minutes since epoch.
+		ElementSet elements = VerificationSet.ReadCases()[0].Elements;
+		const double minutes = 1440.0;
+
+		TemeState<double> state = Propagate(elements, minutes);
+		double speed = System.Math.Sqrt((state.VelocityX * state.VelocityX) + (state.VelocityY * state.VelocityY) + (state.VelocityZ * state.VelocityZ));
+		double expected = speed * ElementFieldQuantization.Tle.EpochDays / 2.0 * 86_400.0;
+
+		DataTerm.Contribution epoch = DataTerm.Measure(elements, minutes, DoubleStorageMath.Instance)
+			.Single(c => c.Field == nameof(ElementSet.Epoch));
+
+		Assert.AreEqual(expected, epoch.PositionKilometers, expected * 0.01,
+			$"Epoch moved the prediction {epoch.PositionKilometers * 1000.0:F3} m against {expected * 1000.0:F3} m of speed times 432 µs.");
+	}
+
+	[TestMethod]
+	public void TheEpochIsShiftedForTheDeepSpaceTermsToo()
+	{
+		// The deep-space model reads the epoch itself to place the sun and the moon, so the nudge has
+		// to reach EpochJulianDate as well as the arc. Shifting only the arc is a different
+		// computation for a deep-space set, and this pins that the measurement is not that one.
+		ElementSet deepSpace = VerificationSet.ReadCases().First(c => 1440.0 / c.Elements.MeanMotion >= 225.0).Elements;
+		const double minutes = 1440.0;
+		double halfStepMinutes = ElementFieldQuantization.Tle.EpochDays / 2.0 * 1440.0;
+
+		TemeState<double> asWritten = Propagate(deepSpace, minutes);
+		TemeState<double> arcOnly = Propagate(deepSpace, minutes - halfStepMinutes);
+		double arcOnlySeparation = System.Math.Sqrt(
+			((arcOnly.X - asWritten.X) * (arcOnly.X - asWritten.X))
+			+ ((arcOnly.Y - asWritten.Y) * (arcOnly.Y - asWritten.Y))
+			+ ((arcOnly.Z - asWritten.Z) * (arcOnly.Z - asWritten.Z)));
+
+		double measured = DataTerm.Measure(deepSpace, minutes, DoubleStorageMath.Instance)
+			.Single(c => c.Field == nameof(ElementSet.Epoch)).PositionKilometers;
+
+		Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+			$"{deepSpace.NoradCatalogId}: epoch shifted {measured:E6} km, arc only {arcOnlySeparation:E6} km"));
+		// The difference is micrometres, which is a real response of the solar and lunar terms and
+		// about four orders above the noise of comparing two double propagations of one arc.
+		Assert.IsGreaterThan(1e-10, System.Math.Abs(measured - arcOnlySeparation));
+	}
+
+	[TestMethod]
+	public void TheDragTermsContributionFollowsTheRecordedFormat()
+	{
+		// The same element set measured as if read from each format. B*'s step is 1000 times finer
+		// in OMM, and half a step is far inside the linear regime, so its contribution scales by the
+		// same factor; eccentricity's step is ten times finer and scales by ten.
+		//
+		// 29238 is one of the cases B* leads at a week. On a case where it does not, the OMM
+		// contribution is around ten micrometres, which is close enough to double's own arithmetic
+		// error that the ratio wanders by a few percent: the first case in the file reads 974.
+		ElementSet elements = VerificationSet.ReadCases().First(c => c.Elements.NoradCatalogId == 29238).Elements;
+		IReadOnlyList<DataTerm.Contribution> asTle = DataTerm.Measure(elements with { Format = ElementSetFormat.Tle }, 10080.0, DoubleStorageMath.Instance);
+		IReadOnlyList<DataTerm.Contribution> asOmm = DataTerm.Measure(elements with { Format = ElementSetFormat.Omm }, 10080.0, DoubleStorageMath.Instance);
+
+		Assert.AreEqual(1000.0, Of(asTle, nameof(ElementSet.BStar)) / Of(asOmm, nameof(ElementSet.BStar)), 1.0);
+		Assert.AreEqual(10.0, Of(asTle, nameof(ElementSet.Eccentricity)) / Of(asOmm, nameof(ElementSet.Eccentricity)), 0.01);
+		Assert.AreEqual(Of(asTle, nameof(ElementSet.MeanAnomaly)), Of(asOmm, nameof(ElementSet.MeanAnomaly)));
+	}
+
+	private static double Of(IReadOnlyList<DataTerm.Contribution> contributions, string field) =>
+		contributions.Single(c => c.Field == field).PositionKilometers;
+
+	private static TemeState<double> Propagate(ElementSet elements, double minutes)
+	{
+		Sgp4Satellite<double> satellite = Sgp4<double>.Initialize(elements, DoubleStorageMath.Instance);
+		return Sgp4<double>.Propagate(satellite, minutes, DoubleStorageMath.Instance).State;
+	}
+
 	private static double Term(ElementSet elements, double minutes) =>
 		DataTerm.CombineInQuadrature(DataTerm.Measure(elements, minutes, DoubleStorageMath.Instance));
 }

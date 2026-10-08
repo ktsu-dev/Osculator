@@ -80,4 +80,13 @@ public sealed record ElementSet
 
 	/// <summary>Gets the element set number.</summary>
 	public int ElementSetNumber { get; init; }
+
+	/// <summary>Gets the format the element set was read from, which fixes how finely each field is written.</summary>
+	/// <remarks>
+	/// The data error term reads each field's quantization step from this, through
+	/// <see cref="ElementFieldQuantization.For(ElementSet)"/>. The parsers set it. An element set built
+	/// by hand gets <see cref="ElementSetFormat.Tle"/>, the coarser of the two, so a forgotten format
+	/// overstates the data term rather than understating it.
+	/// </remarks>
+	public ElementSetFormat Format { get; init; } = ElementSetFormat.Tle;
 }

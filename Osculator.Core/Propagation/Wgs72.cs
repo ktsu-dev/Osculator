@@ -44,8 +44,23 @@ public static class Wgs72<T>
 	/// <summary>Gets the fourth zonal harmonic.</summary>
 	public static T J4 { get; } = Literal("-0.00000165597", -0.00000165597);
 
-	/// <summary>Gets the ratio of the third to the second zonal harmonic.</summary>
-	public static T J3OverJ2 { get; } = J3 / J2;
+	/// <summary>
+	/// The ratio of the third to the second zonal harmonic.
+	/// </summary>
+	/// <param name="math">The transcendental functions for <typeparamref name="T"/>, whose division sets the precision.</param>
+	/// <returns>J3 / J2 at the working precision.</returns>
+	/// <remarks>
+	/// A method rather than a stored value because both operands are short literals, and an
+	/// arbitrary-precision type's division operator rounds such a quotient to a fixed width whatever
+	/// working precision was chosen. Going through <paramref name="math"/> takes it at the precision
+	/// the caller is actually running at.
+	/// </remarks>
+	public static T J3OverJ2(IStorageMath<T> math)
+	{
+		Ensure.NotNull(math);
+
+		return math.Divide(J3, J2);
+	}
 
 	/// <summary>
 	/// Gets the square root of the gravitational parameter in Earth radii and minutes.
@@ -62,7 +77,7 @@ public static class Wgs72<T>
 		Ensure.NotNull(math);
 
 		T sixty = T.CreateChecked(60);
-		return sixty / math.Sqrt(RadiusEarthKm * RadiusEarthKm * RadiusEarthKm / Mu);
+		return math.Divide(sixty, math.Sqrt(math.Divide(RadiusEarthKm * RadiusEarthKm * RadiusEarthKm, Mu)));
 	}
 
 	/// <summary>Reads a published constant in <typeparamref name="T"/>'s own parser.</summary>
