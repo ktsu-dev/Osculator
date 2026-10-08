@@ -9,6 +9,7 @@ using Hexa.NET.ImGui;
 using ktsu.ImGui.Widgets;
 using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
+using ktsu.Osculator.App.Shell;
 using ktsu.Osculator.Core.Residuals;
 
 /// <summary>
@@ -30,14 +31,12 @@ using ktsu.Osculator.Core.Residuals;
 /// which SGP4 never reads and so contributes exactly nothing.
 /// </para>
 /// <para>
-/// Until the catalogue panel supplies a selection through <see cref="Select"/>, the panel shows an
+/// The panel follows <see cref="CatalogueSelection"/>. Until something is selected there it shows an
 /// ISS element set that is also committed in the parser tests.
 /// </para>
 /// </remarks>
-internal static class ElementInspectorPanel
+internal sealed class ElementInspectorPanel : Panel
 {
-	/// <summary>The window title, and the id the shell docks the panel under.</summary>
-	internal const string Title = "Element inspector";
 
 	private const string DefaultLine1 = "1 25544U 98067A   26258.88499338  .00006292  00000+0  12172-3 0  9999";
 	private const string DefaultLine2 = "2 25544  51.6310 211.2092 0004923 144.3133 215.8185 15.49128922585812";
@@ -52,16 +51,22 @@ internal static class ElementInspectorPanel
 		LabelColumnWeight = 0.35f,
 	};
 
-	private static ElementSet asWritten = TleParser.Parse(DefaultLine1, DefaultLine2, "ISS (ZARYA)");
-	private static ElementSet current = asWritten;
-	private static float horizonDays = 1.0f;
-	private static Measurement? measurement;
+	private static readonly ElementSet DefaultElements = TleParser.Parse(DefaultLine1, DefaultLine2, "ISS (ZARYA)");
+
+	private ElementSet asWritten = DefaultElements;
+	private ElementSet current = DefaultElements;
+	private float horizonDays = 1.0f;
+	private Measurement? measurement;
+	private long seenSelectionVersion;
+
+	/// <inheritdoc/>
+	protected override string Title => "Element inspector";
 
 	/// <summary>
-	/// Shows an element set, typically the one selected in the catalogue.
+	/// Shows an element set. The catalogue selection calls this through <see cref="Draw"/>.
 	/// </summary>
 	/// <param name="elements">The element set as written.</param>
-	internal static void Select(ElementSet elements)
+	internal void Select(ElementSet elements)
 	{
 		Ensure.NotNull(elements);
 
@@ -73,17 +78,25 @@ internal static class ElementInspectorPanel
 	/// <summary>
 	/// Restores the panel's start-up state.
 	/// </summary>
-	internal static void ResetState()
+	internal void ResetState()
 	{
-		Select(TleParser.Parse(DefaultLine1, DefaultLine2, "ISS (ZARYA)"));
+		Select(DefaultElements);
 		horizonDays = 1.0f;
 	}
 
-	/// <summary>
-	/// Draws the panel's contents for one frame.
-	/// </summary>
-	internal static void Draw()
+	/// <inheritdoc/>
+	protected override void Draw()
 	{
+		if (CatalogueSelection.Version != seenSelectionVersion)
+		{
+			seenSelectionVersion = CatalogueSelection.Version;
+
+			if (CatalogueSelection.Selected is { } selected)
+			{
+				Select(selected);
+			}
+		}
+
 		ImGui.TextUnformatted($"{current.ObjectName}  ({current.NoradCatalogId.ToString(Culture)})");
 
 		if (ImGui.SliderFloat("Horizon (days)", ref horizonDays, 0.0f, 30.0f, "%.2f"))
@@ -164,7 +177,7 @@ internal static class ElementInspectorPanel
 		}
 	}
 
-	private static void DrawIdentity(ImGuiWidgets.PropertyGrid grid)
+	private void DrawIdentity(ImGuiWidgets.PropertyGrid grid)
 	{
 		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section("Identity (not quantized orbit fields)", defaultOpen: false);
 
@@ -175,7 +188,7 @@ internal static class ElementInspectorPanel
 		ReadOnlyRow(grid, "REV_AT_EPOCH", current.RevolutionAtEpoch.ToString(Culture));
 	}
 
-	private static void DrawEpoch(ImGuiWidgets.PropertyGrid grid)
+	private void DrawEpoch(ImGuiWidgets.PropertyGrid grid)
 	{
 		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section("EPOCH");
 
@@ -184,7 +197,7 @@ internal static class ElementInspectorPanel
 		ReadOnlyRow(grid, "dr per step##EPOCH", "not measured yet: the data term does not perturb the epoch");
 	}
 
-	private static void DrawMeanMotionDdot(ImGuiWidgets.PropertyGrid grid)
+	private void DrawMeanMotionDdot(ImGuiWidgets.PropertyGrid grid)
 	{
 		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section("MEAN_MOTION_DDOT");
 
@@ -193,7 +206,7 @@ internal static class ElementInspectorPanel
 		ReadOnlyRow(grid, "dr per step##MEAN_MOTION_DDOT", "0 m: SGP4 never reads this field");
 	}
 
-	private static bool DrawField(
+	private bool DrawField(
 		ImGuiWidgets.PropertyGrid grid,
 		string ommName,
 		string unit,
@@ -218,7 +231,7 @@ internal static class ElementInspectorPanel
 		return changed;
 	}
 
-	private static string Sensitivity(string dataTermField)
+	private string Sensitivity(string dataTermField)
 	{
 		if (measurement is not { Error: null } m)
 		{

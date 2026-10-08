@@ -21,5 +21,6 @@ internal static class Panels
 	internal static void Register(PanelRegistry registry)
 	{
 		registry.Register<StorageComparisonWindow>();
+		registry.Register<global::ktsu.Osculator.App.Panels.ElementInspectorPanel>();
 	}
 }
