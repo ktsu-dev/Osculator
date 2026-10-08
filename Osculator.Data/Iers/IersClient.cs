@@ -37,41 +37,73 @@ public sealed class IersClient(HttpClient http, ResponseCache cache)
 	/// Gets the Earth orientation table, from the cache when it is fresh enough.
 	/// </summary>
 	/// <param name="cancellationToken">Cancels the fetch.</param>
-	/// <returns>The parsed table.</returns>
+	/// <returns>The parsed table, and whether it is a stale copy served because the fetch failed.</returns>
 	/// <exception cref="IersException">The series could not be fetched and nothing is cached.</exception>
-	public async Task<EarthOrientationTable> GetTableAsync(CancellationToken cancellationToken = default)
+	/// <exception cref="OperationCanceledException">The caller cancelled.</exception>
+	public async Task<Fetched<EarthOrientationTable>> GetTableAsync(CancellationToken cancellationToken = default)
 	{
 		Ensure.NotNull(cache);
 
-		string? fresh = cache.Read(CacheKey);
-
-		if (fresh is not null)
+		try
 		{
-			return EarthOrientationTable.Parse(fresh);
+			Fetched<string> fetched = await cache.FetchAsync(
+				CacheKey,
+				DownloadAsync,
+				failure => failure is HttpRequestException or FormatException or TaskCanceledException,
+				cancellationToken).ConfigureAwait(false);
+
+			return fetched.Map(EarthOrientationTable.Parse);
+		}
+		catch (ResponseUnavailableException unavailable)
+		{
+			throw new IersException($"Could not fetch {FinalsEndpoint} and nothing is cached.", unavailable.InnerException ?? unavailable);
+		}
+	}
+
+	/// <summary>Downloads the series and refuses a copy worse than the one already held.</summary>
+	/// <param name="cached">The copy currently cached at any age, or null.</param>
+	/// <param name="cancellationToken">Cancels the download.</param>
+	/// <returns>The body to cache.</returns>
+	/// <exception cref="FormatException">The body is not a usable series, or ends early.</exception>
+	private async Task<string> DownloadAsync(string? cached, CancellationToken cancellationToken)
+	{
+		string body = await http.GetStringAsync(new Uri(FinalsEndpoint), cancellationToken).ConfigureAwait(false);
+
+		// Parsing catches a redirect or a login page, which has no header. It does not catch a
+		// truncated download: any prefix of the file that keeps the header and one whole row is a
+		// valid table, just one that ends wherever the connection dropped. Written over the good
+		// copy it would refuse every later instant, offline too. The series only ever grows at its
+		// end, so a new copy that ends earlier than the one held is a truncated one.
+		EarthOrientationTable table = EarthOrientationTable.Parse(body);
+
+		if (TryParse(cached) is EarthOrientationTable held
+			&& table.LastModifiedJulianDate < held.LastModifiedJulianDate)
+		{
+			throw new FormatException(FormattableString.Invariant(
+				$"The downloaded series ends at MJD {table.LastModifiedJulianDate}, earlier than the cached copy's {held.LastModifiedJulianDate}; treating it as truncated."));
+		}
+
+		return body;
+	}
+
+	/// <summary>Parses a cached copy, or gives null when there is none or it no longer parses.</summary>
+	/// <param name="cached">The cached body.</param>
+	/// <returns>The table.</returns>
+	/// <remarks>A cached copy that does not parse is no reason to refuse one that does.</remarks>
+	private static EarthOrientationTable? TryParse(string? cached)
+	{
+		if (cached is null)
+		{
+			return null;
 		}
 
 		try
 		{
-			string body = await http.GetStringAsync(new Uri(FinalsEndpoint), cancellationToken).ConfigureAwait(false);
-
-			// Parsed before it is written, so a truncated or redirected download never displaces a
-			// good cached copy with something that will fail to parse on every later run.
-			EarthOrientationTable table = EarthOrientationTable.Parse(body);
-			cache.Write(CacheKey, body);
-
-			return table;
+			return EarthOrientationTable.Parse(cached);
 		}
-		catch (Exception failure) when (
-			failure is HttpRequestException or FormatException
-			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+		catch (FormatException)
 		{
-			// A timeout falls back; the caller's own cancellation does not, because returning stale
-			// data from a call the caller abandoned would report it as a success.
-			string? stale = cache.ReadAtAnyAge(CacheKey);
-
-			return stale is not null
-				? EarthOrientationTable.Parse(stale)
-				: throw new IersException($"Could not fetch {FinalsEndpoint} and nothing is cached.", failure);
+			return null;
 		}
 	}
 }
