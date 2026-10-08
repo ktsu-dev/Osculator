@@ -296,6 +296,42 @@ public sealed class Sgp4VerificationTests
 	}
 
 	[TestMethod]
+	[DataRow(NearEarthCatalogId, DisplayName = "near-earth")]
+	[DataRow(HalfDayResonantCatalogId, DisplayName = "deep-space, half-day resonance")]
+	public void QuotientsOfLiteralsAreTakenAtTheWorkingPrecision_NotAtFifty(int catalogId)
+	{
+		// PreciseNumber's division operator rounds a quotient of two short operands — two thirds, a
+		// literal over the Earth's radius, J3 over J2 — to fifty digits whatever working precision
+		// was asked for. Comparing a run with a wider run cannot catch that: both carry the same
+		// fifty-digit two thirds and agree with each other to a hundred digits, which is exactly how
+		// runs above fifty came to look converged. So this checks identities the quotients have to
+		// satisfy instead, at 120 digits, where a fifty-digit quotient misses by about 1e-50.
+		const int Digits = 120;
+		const double Tolerance = 1e-110;
+		PreciseStorageMath math = new(Digits);
+
+		// J3 / J2, multiplied back.
+		double j3 = Relative(Wgs72<PreciseNumber>.J3OverJ2(math) * Wgs72<PreciseNumber>.J2, Wgs72<PreciseNumber>.J3);
+
+		// xke = 60 / sqrt(R³ / μ), so xke² R³ / μ is exactly 3600.
+		PreciseNumber xke = Wgs72<PreciseNumber>.Xke(math);
+		PreciseNumber r = Wgs72<PreciseNumber>.RadiusEarthKm;
+		double xkeIdentity = Relative(math.Divide(xke * xke * r * r * r, Wgs72<PreciseNumber>.Mu), 3600.0.ToPreciseNumber());
+
+		// a = (n / xke)^(−2/3), so n² a³ is xke². The exponent is Initialize's two thirds.
+		Sgp4Satellite<PreciseNumber> satellite = Sgp4<PreciseNumber>.Initialize(CaseFor(catalogId).Elements, math);
+		PreciseNumber a = satellite.SemiMajorAxis;
+		PreciseNumber n = satellite.MeanMotion;
+		double kepler = Relative(n * n * a * a * a, xke * xke);
+
+		Console.WriteLine($"{catalogId} at {Digits} digits: J3/J2 {j3:E3}, xke {xkeIdentity:E3}, n²a³ = xke² {kepler:E3} (relative)");
+
+		Assert.IsLessThan(Tolerance, j3, "J3 / J2 is not taken at the working precision.");
+		Assert.IsLessThan(Tolerance, xkeIdentity, "R³ / μ in xke is not taken at the working precision.");
+		Assert.IsLessThan(Tolerance, kepler, "Initialize's two thirds is not taken at the working precision.");
+	}
+
+	[TestMethod]
 	public void TheWgs72ConstantsAreTheirPublishedLiteralsInEveryStorageType()
 	{
 		// Parsed from the literal per storage type rather than converted from double, so a wide type
@@ -328,4 +364,11 @@ public sealed class Sgp4VerificationTests
 		Sgp4<T>.Propagate(Sgp4<T>.Initialize(elements, math), minutes, math).Error;
 
 	private static double Distance(double x, double y, double z) => System.Math.Sqrt((x * x) + (y * y) + (z * z));
+
+	/// <summary>How far a value is from the one it should equal, relative to that one.</summary>
+	/// <param name="value">The value.</param>
+	/// <param name="expected">The value it should equal.</param>
+	/// <returns>The relative difference, differenced in PreciseNumber where subtraction is exact.</returns>
+	private static double Relative(PreciseNumber value, PreciseNumber expected) =>
+		System.Math.Abs((value - expected).To<double>() / expected.To<double>());
 }

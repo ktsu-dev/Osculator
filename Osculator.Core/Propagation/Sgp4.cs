@@ -57,7 +57,7 @@ public static class Sgp4<T>
 
 		T two = N(2);
 		T twoPi = math.Pi * two;
-		T x2o3 = two / N(3);
+		T x2o3 = math.Divide(two, N(3));
 
 		Sgp4Satellite<T> sat = new()
 		{
@@ -106,7 +106,7 @@ public static class Sgp4<T>
 		T ak = math.Pow(xke / sat.MeanMotionKozai, x2o3);
 		T d1 = N(0.75) * j2 * ((N(3) * cosio2) - T.One) / (rteosq * omeosq);
 		T del = d1 / (ak * ak);
-		T adel = ak * (T.One - (del * del) - (del * ((T.One / N(3)) + (N(134) * del * del / N(81)))));
+		T adel = ak * (T.One - (del * del) - (del * (math.Divide(T.One, N(3)) + (N(134) * del * del / N(81)))));
 		del = d1 / (adel * adel);
 		sat.MeanMotion = math.ToWorkingPrecision(sat.MeanMotionKozai / (T.One + del));
 
@@ -131,11 +131,11 @@ public static class Sgp4<T>
 			return sat;
 		}
 
-		sat.IsSimplified = rp < (N(220) / Wgs72<T>.RadiusEarthKm) + T.One;
+		sat.IsSimplified = rp < math.Divide(N(220), Wgs72<T>.RadiusEarthKm) + T.One;
 
 		// Atmospheric drag: the model thins its own atmosphere below 156 km and gives up below 98.
-		T sfour = (N(78) / Wgs72<T>.RadiusEarthKm) + T.One;
-		T qzms24 = Pow4((N(120) - N(78)) / Wgs72<T>.RadiusEarthKm);
+		T sfour = math.Divide(N(78), Wgs72<T>.RadiusEarthKm) + T.One;
+		T qzms24 = Pow4(math.Divide(N(120) - N(78), Wgs72<T>.RadiusEarthKm));
 		T perigeeKm = (rp - T.One) * Wgs72<T>.RadiusEarthKm;
 
 		if (perigeeKm < N(156))
@@ -168,7 +168,7 @@ public static class Sgp4<T>
 
 		if (ecco > N(1e-4))
 		{
-			cc3 = -two * coef * tsi * Wgs72<T>.J3OverJ2 * sat.MeanMotion * sinio / ecco;
+			cc3 = -two * coef * tsi * Wgs72<T>.J3OverJ2(math) * sat.MeanMotion * sinio / ecco;
 		}
 
 		sat.X1mth2 = math.ToWorkingPrecision(T.One - cosio2);
@@ -210,10 +210,10 @@ public static class Sgp4<T>
 		// A retrograde orbit at exactly 180 degrees would divide by zero here.
 		T oneMinusCos = T.Abs(cosio + T.One);
 		T guard = N(1.5e-12);
-		sat.Xlcof = math.ToWorkingPrecision(-N(0.25) * Wgs72<T>.J3OverJ2 * sinio * (N(3) + (N(5) * cosio))
+		sat.Xlcof = math.ToWorkingPrecision(-N(0.25) * Wgs72<T>.J3OverJ2(math) * sinio * (N(3) + (N(5) * cosio))
 				/ (oneMinusCos > guard ? T.One + cosio : guard));
 
-		sat.Aycof = math.ToWorkingPrecision(-N(0.5) * Wgs72<T>.J3OverJ2 * sinio);
+		sat.Aycof = math.ToWorkingPrecision(-N(0.5) * Wgs72<T>.J3OverJ2(math) * sinio);
 
 		T delmotemp = T.One + (sat.Eta * math.Cos(sat.MeanAnomaly));
 		sat.Delmo = math.ToWorkingPrecision(delmotemp * delmotemp * delmotemp);
@@ -285,7 +285,7 @@ public static class Sgp4<T>
 
 		T two = N(2);
 		T twoPi = math.Pi * two;
-		T x2o3 = two / N(3);
+		T x2o3 = math.Divide(two, N(3));
 		T xke = Wgs72<T>.Xke(math);
 		T j2 = Wgs72<T>.J2;
 		T t = minutesSinceEpoch;
@@ -418,8 +418,8 @@ public static class Sgp4<T>
 			T oneMinusCos = T.Abs(cosip + T.One);
 			T guard = N(1.5e-12);
 
-			aycof = -N(0.5) * Wgs72<T>.J3OverJ2 * sinip;
-			xlcof = -N(0.25) * Wgs72<T>.J3OverJ2 * sinip * (N(3) + (N(5) * cosip))
+			aycof = -N(0.5) * Wgs72<T>.J3OverJ2(math) * sinip;
+			xlcof = -N(0.25) * Wgs72<T>.J3OverJ2(math) * sinip * (N(3) + (N(5) * cosip))
 				/ (oneMinusCos > guard ? T.One + cosip : guard);
 
 			T cosisq = cosip * cosip;
