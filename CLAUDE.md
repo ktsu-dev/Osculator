@@ -469,8 +469,14 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    specifies expected positions to 10⁻⁸ km. **Passing**, over both the near-earth and the
    deep-space model.
 2. The same suite in every storage type, tolerance scaled to the type. **Passing for all four.**
-   `float` was never expected to meet 10⁻⁸ km — recording where it fails, and that it does so
-   without saying so, is the result.
+   The stated tolerances, asserted per row by `Gate2StorageBoundsTests`: `double` 10⁻⁸ km (gate 1),
+   `decimal` and `PreciseNumber` 10⁻⁶ km and 10⁻⁸ km/s, against measured worsts of 4.2e-7 and
+   7.3e-8 km. Neither can meet 10⁻⁸ km and neither should: the published vectors were computed in
+   `double`, so a run that rounds differently — even one that rounds less — disagrees with them by
+   their own precision. `float` was never expected to meet any tolerance — recording where it
+   fails, and that it does so without saying so, is the result. `Sgp4StopPointTests` checks the
+   other edge in `double`, `decimal` and `PreciseNumber`: every case whose published output ends
+   before its stop time is refused, with the expected code, at the next grid step.
 3. Frame transforms against a published reference vector. **Passing.** `FrameCorrectnessTests`
    runs the worked example in Appendix C of Vallado et al. 2006 (AIAA 2006-6753 Rev 2) through
    TEME → PEF and PEF → ITRF separately, so a failure says whether rotation or polar motion broke.
