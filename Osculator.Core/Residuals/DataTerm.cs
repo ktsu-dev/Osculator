@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
+using ktsu.Osculator.Core.Time;
 
 /// <summary>
 /// How far apart two predictions can be purely because the element set is written down in a
@@ -64,7 +65,7 @@ public static class DataTerm
 	/// <see langword="double"/> rather than the generic storage type, deliberately. The point of
 	/// this measurement is to be the yardstick that Δ_arith is held against, and a yardstick whose
 	/// own length depends on which storage type was used to measure it is not one. It is also
-	/// sound: the term being measured is 0.3 to 3 km, ten orders of magnitude above
+	/// sound: the term being measured is around 0.06 km, eight orders of magnitude above
 	/// <see langword="double"/>'s own arithmetic error, which `StorageComparisonTests` measures.
 	/// </remarks>
 	public static IReadOnlyList<Contribution> Measure(ElementSet elements, double minutesSinceEpoch, IStorageMath<double> math)
@@ -73,12 +74,20 @@ public static class DataTerm
 		Ensure.NotNull(math);
 
 		TemeState<double> asWritten = PropagateOrThrow(elements, minutesSinceEpoch, math, "as written");
+		ElementFieldSteps steps = ElementFieldQuantization.For(elements);
 		List<Contribution> contributions = [];
 
-		foreach ((string field, Func<ElementSet, double> stepOf, Func<ElementSet, double, ElementSet> nudge) in Perturbations)
+		foreach ((string field, Func<ElementSet, ElementFieldSteps, double> stepOf, Func<ElementSet, double, ElementSet> nudge) in Perturbations)
 		{
-			double step = stepOf(elements);
-			TemeState<double> perturbed = PropagateOrThrow(nudge(elements, step / 2.0), minutesSinceEpoch, math, field);
+			double step = stepOf(elements, steps);
+			ElementSet nudged = nudge(elements, step / 2.0);
+
+			// Both predictions are of the same instant, so the arc is measured from each set's own
+			// epoch. For every field but the epoch the two epochs agree and this is zero; for the
+			// epoch it is the whole perturbation, because SGP4 sees only minutes since epoch outside
+			// the deep-space terms, and a shifted epoch at an unshifted arc is the same computation.
+			double minutesFromNudgedEpoch = minutesSinceEpoch - MinutesBetween(elements.EpochJulianDate, nudged.EpochJulianDate);
+			TemeState<double> perturbed = PropagateOrThrow(nudged, minutesFromNudgedEpoch, math, field);
 
 			contributions.Add(new Contribution(field, step, Separation(asWritten, perturbed)));
 		}
@@ -113,34 +122,57 @@ public static class DataTerm
 	}
 
 	/// <summary>
-	/// The eight fields, each with the step it is written to and how to nudge it.
+	/// The nine fields SGP4 is handed, each with the step it is written to and how to nudge it.
 	/// </summary>
 	/// <remarks>
-	/// The step is a function of the element set rather than a constant because B* is not written
-	/// as a fixed decimal: it carries five significant digits and an exponent, so its step is
-	/// relative, and one absolute number would be meaningless across the six orders of magnitude
-	/// the field spans. Seven of the eight ignore their argument; the eighth is the reason the
-	/// argument exists.
+	/// <para>
+	/// The step is a function of the element set and its format's steps rather than a constant for
+	/// two reasons. B* is not written as a fixed decimal: it carries a fixed number of significant
+	/// digits and an exponent, so its step is relative, and one absolute number would be meaningless
+	/// across the six orders of magnitude the field spans. And the two distributed formats write
+	/// eccentricity and B* to different precisions, so which steps apply is a property of where the
+	/// element set came from.
+	/// </para>
+	/// <para>
+	/// The epoch is nudged in both of the forms <see cref="ElementSet"/> carries, so the deep-space
+	/// solar and lunar terms see the shift as well as the arc does. Half of its step is 432 µs, a
+	/// whole number of <see cref="DateTime"/> ticks, so neither form is rounded.
+	/// <see cref="ElementSet.MeanMotionDdot"/> is the one written field that is absent, because SGP4
+	/// never reads it and there is nothing to nudge.
+	/// </para>
 	/// </remarks>
-	private static readonly (string Field, Func<ElementSet, double> StepOf, Func<ElementSet, double, ElementSet> Nudge)[] Perturbations =
+	private static readonly (string Field, Func<ElementSet, ElementFieldSteps, double> StepOf, Func<ElementSet, double, ElementSet> Nudge)[] Perturbations =
 	[
-		("MeanMotion", static _ => ElementFieldQuantization.MeanMotion,
+		(nameof(ElementSet.Epoch), static (_, s) => s.EpochDays,
+			static (e, d) => e with
+			{
+				Epoch = e.Epoch.AddTicks((long)System.Math.Round(d * TimeSpan.TicksPerDay)),
+				EpochJulianDate = e.EpochJulianDate with { DayFraction = e.EpochJulianDate.DayFraction + d },
+			}),
+		(nameof(ElementSet.MeanMotion), static (_, s) => s.MeanMotion,
 			static (e, d) => e with { MeanMotion = e.MeanMotion + d }),
-		("Eccentricity", static _ => ElementFieldQuantization.Eccentricity,
+		(nameof(ElementSet.Eccentricity), static (_, s) => s.Eccentricity,
 			static (e, d) => e with { Eccentricity = e.Eccentricity + d }),
-		("Inclination", static _ => ElementFieldQuantization.Inclination,
+		(nameof(ElementSet.Inclination), static (_, s) => s.Inclination,
 			static (e, d) => e with { Inclination = e.Inclination + d }),
-		("RightAscensionOfAscendingNode", static _ => ElementFieldQuantization.RightAscensionOfAscendingNode,
+		(nameof(ElementSet.RightAscensionOfAscendingNode), static (_, s) => s.RightAscensionOfAscendingNode,
 			static (e, d) => e with { RightAscensionOfAscendingNode = e.RightAscensionOfAscendingNode + d }),
-		("ArgumentOfPericenter", static _ => ElementFieldQuantization.ArgumentOfPericenter,
+		(nameof(ElementSet.ArgumentOfPericenter), static (_, s) => s.ArgumentOfPericenter,
 			static (e, d) => e with { ArgumentOfPericenter = e.ArgumentOfPericenter + d }),
-		("MeanAnomaly", static _ => ElementFieldQuantization.MeanAnomaly,
+		(nameof(ElementSet.MeanAnomaly), static (_, s) => s.MeanAnomaly,
 			static (e, d) => e with { MeanAnomaly = e.MeanAnomaly + d }),
-		("MeanMotionDot", static _ => ElementFieldQuantization.MeanMotionDot,
+		(nameof(ElementSet.MeanMotionDot), static (_, s) => s.MeanMotionDot,
 			static (e, d) => e with { MeanMotionDot = e.MeanMotionDot + d }),
-		("BStar", static e => ElementFieldQuantization.StepForExponentialField(e.BStar),
+		(nameof(ElementSet.BStar), static (e, s) => s.StepForExponentialField(e.BStar),
 			static (e, d) => e with { BStar = e.BStar + d }),
 	];
+
+	/// <summary>Gets the field names <see cref="Measure"/> perturbs, in table order.</summary>
+	/// <remarks>So a test can hold this table against the quantization model and catch a field going missing.</remarks>
+	public static IReadOnlyList<string> PerturbedFields { get; } = Array.ConvertAll(Perturbations, static p => p.Field);
+
+	private static double MinutesBetween(JulianDate from, JulianDate to) =>
+		(to.Day - from.Day + (to.DayFraction - from.DayFraction)) * 1440.0;
 
 	private static TemeState<double> PropagateOrThrow(ElementSet elements, double minutes, IStorageMath<double> math, string what)
 	{

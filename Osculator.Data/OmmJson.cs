@@ -113,6 +113,7 @@ public static class OmmJson
 			MeanMotionDdot = record.MeanMotionDdot,
 			RevolutionAtEpoch = record.RevAtEpoch,
 			ElementSetNumber = record.ElementSetNo,
+			Format = ElementSetFormat.Omm,
 		};
 	}
 
