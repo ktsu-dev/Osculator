@@ -176,6 +176,33 @@ axis order — a cross product and its negation have identical dimensions — so
 are pinned by construction against a state whose answer is obvious by inspection. Writing it turned
 up trap 13 below, which is the first Δ_model term this repository has measured rather than quoted.
 
+**The M2 number exists: the ISS diverges by 10.9 km over a week.** `Divergence<T>` propagates an
+archived element set to a later set's epoch, evaluates the later set at its own epoch, and resolves
+prediction minus reference in the later set's RIC frame. `DivergenceTests` runs it over three real
+ISS element sets committed under `Osculator.Tests/Data/iss-snapshots`, read through `SnapshotStore`
+exactly as the application would:
+
+| pair | horizon | radial | along-track | cross-track | \|r\| |
+|---|---|---|---|---|---|
+| 09-15 08:51 → 09-15 21:14 | 0.52 d | +0.012 km | +0.264 km | +0.100 km | **0.283 km** |
+| 09-15 21:14 → 09-22 20:26 | 6.97 d | +0.154 km | **−10.810 km** | +1.498 km | **10.915 km** |
+
+Three things to take from it, all asserted:
+
+1. **This is Δ_model and Δ_data together, not SGP4's error.** The later set is not truth; it is
+   another fit of the same model, in the same quantized digits. Separating the terms is M5. The
+   week's figure lands inside the spec's projected 5–20 km for Δ_model and is two hundred times the
+   0.056 km of Δ_data measured for one set — so the projection survives first contact with data.
+2. **Along-track dominates both pairs**, but only by 2.6× over cross-track on the half-day pair. It
+   is a property of the data, asserted, not something the frame guarantees.
+3. **`double` and 30 digits agree on the week's divergence to 1.7e-9 km.** Ten orders of magnitude
+   below what is being measured, at the measurement the application actually exists to make.
+
+The rate components use **SGP4's stated velocity** for both states, decided rather than defaulted
+(trap 13): it is what an element-set consumer receives, and the position components do not depend on
+the choice. Three snapshots is what was available to commit — CelesTrak serves only the current set,
+so a longer history has to be accumulated by `SnapshotStore` over time, or seeded from Space-Track.
+
 **Residual statistics are accumulated in the storage type, with no compensation.**
 `ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
 `ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
