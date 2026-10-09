@@ -41,7 +41,7 @@ public sealed class AppGallery : IDisposable
 	internal const string OutputVariable = "OSCULATOR_GALLERY_OUT";
 
 	private static readonly Lazy<string> TemporaryOutput = new(() =>
-		Path.Combine(Path.GetTempPath(), $"osculator-gallery-{Guid.NewGuid():N}"));
+		Path.Join(Path.GetTempPath(), $"osculator-gallery-{Guid.NewGuid():N}"));
 
 	private AppShell? shell;
 	private ImGuiAppHarness? harness;
@@ -118,7 +118,7 @@ public sealed class AppGallery : IDisposable
 
 		Bitmap32 picture = harness.Target;
 		Directory.CreateDirectory(OutputDirectory);
-		string path = Path.Combine(OutputDirectory, entry.Slug + ".png");
+		string path = Path.Join(OutputDirectory, entry.Slug + ".png");
 		picture.SavePng(path);
 		TestContext.WriteLine($"Wrote {path} ({picture.Width}x{picture.Height}).");
 	}
@@ -130,7 +130,7 @@ public sealed class AppGallery : IDisposable
 		Assert.HasCount(slugs.Length, slugs.Distinct(StringComparer.Ordinal), "Two gallery entries would write the same file.");
 
 		Directory.CreateDirectory(OutputDirectory);
-		File.WriteAllText(Path.Combine(OutputDirectory, "README.md"), GalleryIndex.Render(GalleryCatalog.Entries));
+		File.WriteAllText(Path.Join(OutputDirectory, "README.md"), GalleryIndex.Render(GalleryCatalog.Entries));
 	}
 
 	private static void ResetSharedState()

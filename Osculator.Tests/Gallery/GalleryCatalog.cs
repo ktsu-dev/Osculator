@@ -109,7 +109,7 @@ internal static class GalleryCatalog
 		stage.Settle(
 			() => StorageComparisonPanel.Latest is { } latest
 				&& string.Equals(latest.ObjectName, objectName, StringComparison.Ordinal)
-				&& latest.Minutes == minutes
+				&& Math.Abs(latest.Minutes - minutes) < 1e-9
 				&& !StorageComparisonPanel.IsMeasuring,
 			5000,
 			$"the storage comparison of {objectName}");
