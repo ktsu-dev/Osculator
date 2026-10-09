@@ -10,6 +10,7 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using Hexa.NET.ImGui;
+using ktsu.Osculator.App.Shell;
 using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Storage;
@@ -100,9 +101,6 @@ internal static class StorageComparisonPanel
 	/// <summary>The measurement in flight, if any.</summary>
 	private static Task<Comparison>? pending;
 
-	/// <summary>The latest finished measurement.</summary>
-	private static Comparison? latest;
-
 	/// <summary>How one storage type fared.</summary>
 	/// <param name="StorageName">The storage type's name.</param>
 	/// <param name="Error">The propagator's verdict in this type.</param>
@@ -158,6 +156,60 @@ internal static class StorageComparisonPanel
 		DrawPropagationControls();
 		Poll();
 		DrawPropagationTable();
+	}
+
+	/// <summary>
+	/// Gets the latest finished measurement, or <see langword="null"/> before the first one lands.
+	/// </summary>
+	internal static Comparison? Latest { get; private set; }
+
+	/// <summary>
+	/// Gets a value indicating whether a measurement is in flight.
+	/// </summary>
+	internal static bool IsMeasuring => pending is not null;
+
+	/// <summary>
+	/// Chooses the object and the time since its epoch, as the combo box and the Δt field would.
+	/// </summary>
+	/// <param name="objectName">The name of one of the sample objects the combo box offers.</param>
+	/// <param name="minutes">Minutes since the object's epoch.</param>
+	/// <exception cref="ArgumentException">No sample object has that name.</exception>
+	internal static void Select(string objectName, double minutes)
+	{
+		int index = -1;
+
+		for (int i = 0; i < Samples.Count; i++)
+		{
+			if (string.Equals(Samples[i].ObjectName, objectName, StringComparison.Ordinal))
+			{
+				index = i;
+			}
+		}
+
+		if (index < 0)
+		{
+			throw new ArgumentException($"No sample object is named \"{objectName}\".", nameof(objectName));
+		}
+
+		selectedSample = index;
+		minutesSinceEpoch = minutes;
+	}
+
+	/// <summary>
+	/// Puts the panel back as the application first draws it, forgetting any measurement.
+	/// </summary>
+	/// <remarks>
+	/// The panel's state is static and outlives a test's application, so a test that wants to see the
+	/// first measurement rather than the last test's resets it first. A measurement still in flight is
+	/// abandoned rather than awaited; it touches no state of the panel's when it finishes.
+	/// </remarks>
+	internal static void ResetState()
+	{
+		selectedSample = 0;
+		minutesSinceEpoch = MinutesPerDay;
+		requested = null;
+		pending = null;
+		Latest = null;
 	}
 
 	/// <summary>
@@ -310,7 +362,7 @@ internal static class StorageComparisonPanel
 		{
 			if (pending.IsCompletedSuccessfully)
 			{
-				latest = pending.Result;
+				Latest = pending.Result;
 			}
 
 			pending = null;
@@ -329,13 +381,13 @@ internal static class StorageComparisonPanel
 
 	private static void DrawPropagationTable()
 	{
-		if (latest is null)
+		if (Latest is null)
 		{
 			ImGui.TextUnformatted("Propagating...");
 			return;
 		}
 
-		Comparison comparison = latest;
+		Comparison comparison = Latest;
 		double minutes = comparison.Minutes;
 
 		ImGui.TextUnformatted(string.Create(
@@ -363,10 +415,10 @@ internal static class StorageComparisonPanel
 				ImGui.TextUnformatted(DescribeError(comparison, run));
 
 				ImGui.TableNextColumn();
-				ImGui.TextUnformatted(DescribeDuration(run.SecondsPerPropagation));
+				ImGui.TextUnformatted(MeasuredDurations.Show(DescribeDuration(run.SecondsPerPropagation)));
 
 				ImGui.TableNextColumn();
-				ImGui.TextUnformatted(string.Create(CultureInfo.InvariantCulture, $"×{run.SecondsPerPropagation / doubleSeconds:#,0.#}"));
+				ImGui.TextUnformatted(MeasuredDurations.Show(string.Create(CultureInfo.InvariantCulture, $"×{run.SecondsPerPropagation / doubleSeconds:#,0.#}")));
 			}
 
 			ImGui.EndTable();

@@ -11,6 +11,8 @@
 **Design only. No code exists yet.** The specification lives in [`docs/spec.md`](docs/spec.md);
 every quantitative figure in it is a projection until milestone M5 replaces it with a measurement.
 
+The panels as they draw today are pictured in the [app gallery](docs/gallery/README.md).
+
 ## Introduction
 
 > **os·cu·lat·ing orbit** — the Keplerian orbit a body would follow if every perturbation stopped.

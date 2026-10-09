@@ -56,3 +56,12 @@ jobs:
       # here in seconds rather than hanging the job.
       - name: Precise propagation budget (M3 gate)
         run: dotnet run --project Osculator.Benchmarks --configuration Release --no-build -- --budget
+
+  # Regenerates docs/gallery from the main that just passed. See app-gallery.yml for why it waits on
+  # the build rather than running on its own trigger.
+  app-gallery:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/app-gallery.yml
+    permissions:
+      contents: write

@@ -412,7 +412,7 @@ internal sealed class ConjunctionScreeningPanel : Panel
 				? "reference"
 				: Comparison.TimeDifferenceSeconds(run) is double seconds ? string.Create(culture, $"{seconds * 1e6:+0.000;-0.000} µs") : "—");
 			ImGui.TableNextColumn();
-			ImGui.TextUnformatted(string.Create(culture, $"{run.Seconds * 1000.0:F1} ms"));
+			ImGui.TextUnformatted(MeasuredDurations.Show(string.Create(culture, $"{run.Seconds * 1000.0:F1} ms")));
 		}
 
 		ImGui.EndTable();
