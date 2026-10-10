@@ -259,7 +259,7 @@ the ISS week above, in 30-digit `PreciseNumber`:
 | term | 6.97 days |
 |---|---|
 | Δ_model | **10.915 km** (the M2 divergence, through the same routine) |
-| Δ_data, Monte Carlo RMS over 256 draws | **0.0098 km** |
+| Δ_data, Monte Carlo RMS over 256 draws | **0.0095 km** |
 | Δ_arith(`float`) | 0.020 km |
 | Δ_arith(`double`) | **1.7e-9 km** |
 | Δ_arith(`decimal`) | 6.4e-7 km |
@@ -272,10 +272,10 @@ Three things to take from it, all asserted:
 2. **`float`'s round-off is twice the whole data term** on this arc: seven digits lose more than the
    element set's last decimal place is worth.
 3. **The Monte Carlo agrees with `DataTerm`**, which measures the same band field by field: a uniform
-   rounding has an RMS of the half step over √3, and a converged ensemble reads 9.866e-3 km against
-   the 9.844e-3 that predicts. The ensemble also perturbs the epoch, which `DataTerm` does not, at
-   3.3 m of along-track at half a step. Steps are the TLE's, so for an OMM-ingested set (trap 6) the
-   figure is an upper bound.
+   rounding has an RMS of the half step over √3, and a converged ensemble reads 9.274e-3 km against
+   the 9.264e-3 that predicts. Both perturb the epoch, and both take their steps from the format
+   the set was read from (`ElementFieldQuantization.For`), so the committed OMM snapshots draw from
+   the JSON's finer eccentricity and B* rather than the two-line text's.
 
 **Residual statistics are accumulated in the storage type, with no compensation.**
 `ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and

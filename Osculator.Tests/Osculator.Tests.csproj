@@ -9,6 +9,8 @@
     <RootNamespace>ktsu.Osculator.Tests</RootNamespace>
     <AssemblyName>$(RootNamespace)</AssemblyName>
     <EnableSourceLink>false</EnableSourceLink>
+    <!-- The gallery loads the application font through ImGui calls that take pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

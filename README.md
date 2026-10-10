@@ -11,6 +11,16 @@
 **Design only. No code exists yet.** The specification lives in [`docs/spec.md`](docs/spec.md);
 every quantitative figure in it is a projection until milestone M5 replaces it with a measurement.
 
+The panels as they draw today are pictured in the [app gallery](docs/gallery/README.md).
+
+## Gallery
+
+One close approach between two constructed objects, found again in float, double, decimal and
+PreciseNumber. Float is about two metres out on a 13 m miss; double agrees with the reference to
+about ten nanometres. Every panel is pictured in the [app gallery](docs/gallery/README.md).
+
+[![A close approach measured in every storage type](docs/gallery/a-close-approach-in-every-storage-type.png)](docs/gallery/README.md)
+
 ## Introduction
 
 > **os·cu·lat·ing orbit** — the Keplerian orbit a body would follow if every perturbation stopped.

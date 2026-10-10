@@ -381,7 +381,9 @@ public static class Decomposition<TReference>
 	/// </para>
 	/// <para>
 	/// Uniform within half a step, because a value rounded to a step is equally likely to have come
-	/// from anywhere within half a step of it. <c>MeanMotionDot</c> is drawn although SGP4 never reads
+	/// from anywhere within half a step of it. The steps are those of the format the set was read from
+	/// (<see cref="ElementFieldQuantization.For(ElementSet)"/>), so an OMM set draws from its finer
+	/// eccentricity and drag term rather than the two-line text's. <c>MeanMotionDot</c> is drawn although SGP4 never reads
 	/// it, so that adding the field to the model one day changes this figure without changing this code.
 	/// </para>
 	/// </remarks>
@@ -389,20 +391,21 @@ public static class Decomposition<TReference>
 		Justification = "A Monte Carlo ensemble that must replay from its seed; nothing here is a secret.")]
 	private static ElementSet Perturb(ElementSet e, Random random)
 	{
-		double epochDays = Offset(random, ElementFieldQuantization.EpochDays);
+		ElementFieldSteps steps = ElementFieldQuantization.For(e);
+		double epochDays = Offset(random, steps.EpochDays);
 
 		return e with
 		{
 			EpochJulianDate = new JulianDate(e.EpochJulianDate.Day, e.EpochJulianDate.DayFraction + epochDays),
 			Epoch = e.Epoch.AddTicks((long)Math.Round(epochDays * TimeSpan.TicksPerDay)),
-			MeanMotion = e.MeanMotion + Offset(random, ElementFieldQuantization.MeanMotion),
-			Eccentricity = e.Eccentricity + Offset(random, ElementFieldQuantization.Eccentricity),
-			Inclination = e.Inclination + Offset(random, ElementFieldQuantization.Inclination),
-			RightAscensionOfAscendingNode = e.RightAscensionOfAscendingNode + Offset(random, ElementFieldQuantization.RightAscensionOfAscendingNode),
-			ArgumentOfPericenter = e.ArgumentOfPericenter + Offset(random, ElementFieldQuantization.ArgumentOfPericenter),
-			MeanAnomaly = e.MeanAnomaly + Offset(random, ElementFieldQuantization.MeanAnomaly),
-			MeanMotionDot = e.MeanMotionDot + Offset(random, ElementFieldQuantization.MeanMotionDot),
-			BStar = e.BStar + Offset(random, ElementFieldQuantization.StepForExponentialField(e.BStar)),
+			MeanMotion = e.MeanMotion + Offset(random, steps.MeanMotion),
+			Eccentricity = e.Eccentricity + Offset(random, steps.Eccentricity),
+			Inclination = e.Inclination + Offset(random, steps.Inclination),
+			RightAscensionOfAscendingNode = e.RightAscensionOfAscendingNode + Offset(random, steps.RightAscensionOfAscendingNode),
+			ArgumentOfPericenter = e.ArgumentOfPericenter + Offset(random, steps.ArgumentOfPericenter),
+			MeanAnomaly = e.MeanAnomaly + Offset(random, steps.MeanAnomaly),
+			MeanMotionDot = e.MeanMotionDot + Offset(random, steps.MeanMotionDot),
+			BStar = e.BStar + Offset(random, steps.StepForExponentialField(e.BStar)),
 		};
 
 		static double Offset(Random random, double step) => (random.NextDouble() - 0.5) * step;
