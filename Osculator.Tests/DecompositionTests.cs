@@ -27,7 +27,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 /// </para>
 /// <code>
 ///   Δ_model              10.915 km        (R +0.154  S −10.810  W +1.498)
-///   Δ_data   rms          0.0098 km       (along-track 0.0092)
+///   Δ_data   rms          0.0095 km       (along-track 0.0089)
 ///   Δ_arith  float        0.020 km
 ///   Δ_arith  double       1.7e-9 km
 ///   Δ_arith  decimal      6.4e-7 km
@@ -114,7 +114,7 @@ public sealed class DecompositionTests
 		// The headline result. On the ISS over a week:
 		//
 		//   Δ_model           10.9 km
-		//   Δ_data            0.0098 km     a thousand times smaller
+		//   Δ_data            0.0095 km     a thousand times smaller
 		//   Δ_arith(double)   1.7e-9 km     six and a half orders below that
 		//
 		// So of the eleven kilometres between this prediction and the next element set, essentially
@@ -177,10 +177,9 @@ public sealed class DecompositionTests
 		// if the response is linear over so small a band — and it is — the Monte Carlo RMS should be
 		// DataTerm's figure over √3 exactly, in expectation.
 		//
-		// DataTerm does not perturb the epoch; the ensemble does. Its contribution is measured here the
-		// same way DataTerm measures the others and added in quadrature before comparing.
+		// Both perturb the epoch, and both take their steps from the format the set was read from.
 		//
-		// Measured: 16384 samples read 9.866e-3 km against 9.843e-3 predicted, 0.2% apart. Run in double
+		// Measured: 16384 samples read 9.274e-3 km against 9.264e-3 predicted, 0.1% apart. Run in double
 		// because a converged ensemble is sixteen thousand propagations, and Δ_data is ten orders
 		// above double's arithmetic, so the reference type cannot matter to this comparison.
 		IReadOnlyList<ElementSet> history = IssHistory();
@@ -190,10 +189,7 @@ public sealed class DecompositionTests
 		double minutes = converged.HorizonMinutes;
 
 		double fieldByField = DataTerm.CombineInQuadrature(DataTerm.Measure(history[1], minutes, math));
-		double epoch = Separation(
-			Propagate(history[1], minutes, math),
-			Propagate(history[1], minutes - (ElementFieldQuantization.EpochDays / 2.0 * 1440.0), math));
-		double predicted = Math.Sqrt(((fieldByField * fieldByField) + (epoch * epoch)) / 3.0);
+		double predicted = fieldByField / Math.Sqrt(3.0);
 
 		Console.WriteLine($"Monte Carlo {converged.Data.RmsMagnitude:E4} km, field by field / √3 {predicted:E4} km");
 
@@ -240,16 +236,6 @@ public sealed class DecompositionTests
 		Assert.ThrowsExactly<ArgumentException>(() => Decomposition<double>.Compute(history[0], history[1] with { NoradCatalogId = 1 }, math));
 		Assert.ThrowsExactly<ArgumentNullException>(() => Decomposition<double>.Compute(history[0], history[1], null!));
 	}
-
-	private static TemeState<double> Propagate(ElementSet elements, double minutes, DoubleStorageMath math)
-	{
-		Sgp4Result<double> result = Sgp4<double>.Propagate(Sgp4<double>.Initialize(elements, math), minutes, math);
-		Assert.IsTrue(result.IsSuccess, result.Error.ToString());
-		return result.State;
-	}
-
-	private static double Separation(TemeState<double> a, TemeState<double> b) =>
-		Math.Sqrt(((b.X - a.X) * (b.X - a.X)) + ((b.Y - a.Y) * (b.Y - a.Y)) + ((b.Z - a.Z) * (b.Z - a.Z)));
 
 	private static Type[] ToTypes(IReadOnlyList<ArithmeticTerm<PreciseNumber>> terms)
 	{
