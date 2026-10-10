@@ -64,27 +64,35 @@ internal sealed class GalleryStage(ImGuiAppHarness harness, AppShell shell)
 	}
 
 	/// <summary>
-	/// Lays the panels out side by side: the first down the left half, the rest stacked down the right.
+	/// Lays three panels out in two columns: two stacked down the left half, the first only as tall as
+	/// asked, and the third down the whole of the right half. Every other panel is closed.
 	/// </summary>
-	internal void ShowSideBySide()
+	/// <typeparam name="TTopLeft">The panel at the top of the left column.</typeparam>
+	/// <typeparam name="TBottomLeft">The panel under it, taking the rest of the column.</typeparam>
+	/// <typeparam name="TRight">The panel down the right column.</typeparam>
+	/// <param name="topLeftHeight">The height of the top-left panel.</param>
+	internal void ShowOverview<TTopLeft, TBottomLeft, TRight>(float topLeftHeight)
+		where TTopLeft : Panel
+		where TBottomLeft : Panel
+		where TRight : Panel
 	{
-		Panel[] panels = [.. Shell.Registry.All];
+		Panel[] shown = [Panel<TTopLeft>(), Panel<TBottomLeft>(), Panel<TRight>()];
+
+		foreach (Panel panel in Shell.Registry.All.Where(panel => !shown.Contains(panel)))
+		{
+			panel.Dismiss();
+		}
+
 		ImGuiViewportPtr viewport = HexaImGui.GetMainViewport();
 		Vector2 origin = viewport.WorkPos;
 		Vector2 size = viewport.WorkSize;
 		float half = MathF.Floor(size.X / 2f);
 
-		Place(panels[0], origin, new Vector2(half, size.Y));
+		Place(shown[0], origin, new Vector2(half, topLeftHeight));
+		Place(shown[1], origin + new Vector2(0f, topLeftHeight), new Vector2(half, size.Y - topLeftHeight));
+		Place(shown[2], origin + new Vector2(half, 0f), new Vector2(size.X - half, size.Y));
 
-		int stacked = panels.Length - 1;
-		for (int i = 0; i < stacked; i++)
-		{
-			float top = MathF.Floor(size.Y * i / stacked);
-			float bottom = MathF.Floor(size.Y * (i + 1) / stacked);
-			Place(panels[i + 1], origin + new Vector2(half, top), new Vector2(size.X - half, bottom - top));
-		}
-
-		Settle(() => Shell.Registry.All.All(panel => panel.DrawnThisFrame), 10, "every panel drawing side by side");
+		Settle(() => shown.All(panel => panel.DrawnThisFrame), 10, "every panel drawing in the overview");
 	}
 
 	/// <summary>Steps frames until a condition holds, failing the entry if it never does.</summary>

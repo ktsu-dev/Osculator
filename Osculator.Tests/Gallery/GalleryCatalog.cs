@@ -33,6 +33,12 @@ internal static class GalleryCatalog
 	/// <summary>The minutes in a day.</summary>
 	private const double MinutesPerDay = 1440.0;
 
+	/// <summary>The height of a picture of the storage comparison alone, which is as tall as what it draws.</summary>
+	private const int StorageComparisonDisplayHeight = 440;
+
+	/// <summary>The height the storage comparison takes in the overview, the rest of its column going to the conjunction screen.</summary>
+	private const float StorageComparisonHeight = 440f;
+
 	/// <summary>The instant the constructed conjunction objects are fitted at, and the screen starts.</summary>
 	private static readonly DateTime ScreenStart = new(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
 
@@ -41,11 +47,12 @@ internal static class GalleryCatalog
 	[
 		new(
 			"The application",
-			"Every panel the shell registers, laid out side by side: the storage comparison on the left, with the element inspector and the conjunction screen beside it. The View menu reopens any panel that is closed.",
+			"Every panel the shell registers, laid out side by side: the storage comparison above the conjunction screen on the left, and the element inspector down the right. The View menu reopens any panel that is closed.",
 			stage =>
 			{
-				stage.ShowSideBySide();
+				stage.ShowOverview<StorageComparisonWindow, ConjunctionScreeningPanel, ElementInspectorPanel>(StorageComparisonHeight);
 				AwaitStorageComparison(stage, "ISS (ZARYA)", MinutesPerDay);
+				_ = Screen(stage);
 			})
 		{
 			Display = (1600, 1000),
@@ -57,15 +64,21 @@ internal static class GalleryCatalog
 			{
 				stage.ShowAlone<StorageComparisonWindow>();
 				AwaitStorageComparison(stage, "ISS (ZARYA)", MinutesPerDay);
-			}),
+			})
+		{
+			Display = (1280, StorageComparisonDisplayHeight),
+		},
 		new(
 			"Storage comparison: a Molniya orbit a week out",
-			"The same measurement on a highly eccentric deep-space orbit from the published verification set, seven days past its epoch. The resolution table above it shows how coarse each storage type is at the magnitudes the propagator works in.",
+			"The same measurement on a highly eccentric deep-space orbit from the published verification set, seven days past its epoch. The resolution table above it is fixed at a 7,000 km radius, so it says how coarse each storage type is at a low orbit's scale rather than at this one's apogee.",
 			stage =>
 			{
 				stage.ShowAlone<StorageComparisonWindow>();
 				AwaitStorageComparison(stage, "09880 (Molniya)", 7.0 * MinutesPerDay);
-			}),
+			})
+		{
+			Display = (1280, StorageComparisonDisplayHeight),
+		},
 		new(
 			"Element inspector",
 			"Every orbit field of the ISS element set with the step its format writes it to, and how far one step moves the propagated position a day out. Mean motion's two derivatives move it not at all, because SGP4 never reads them.",

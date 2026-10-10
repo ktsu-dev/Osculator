@@ -48,7 +48,7 @@ internal sealed class ElementInspectorPanel : Panel
 	private static readonly ImGuiWidgets.PropertyGridOptions GridOptions = new()
 	{
 		DoubleFormat = "%.12g",
-		LabelColumnWeight = 0.35f,
+		LabelColumnWeight = 0.65f,
 	};
 
 	private static readonly ElementSet DefaultElements = TleParser.Parse(DefaultLine1, DefaultLine2, "ISS (ZARYA)");
