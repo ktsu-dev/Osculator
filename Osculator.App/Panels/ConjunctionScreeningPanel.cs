@@ -53,6 +53,12 @@ internal sealed class ConjunctionScreeningPanel : Panel
 
 	private const double MinutesPerHour = 60.0;
 
+	/// <summary>The lines the storage-type comparison under the approaches takes: a caption, a header and four rows, and a margin.</summary>
+	private const float ComparisonLines = 7.0f;
+
+	/// <summary>The fewest lines the approaches table shrinks to, header included.</summary>
+	private const float MinimumTableLines = 4.0f;
+
 	private static readonly TimeSpan RefetchInterval = TimeSpan.FromHours(2);
 
 	private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(2) };
@@ -316,7 +322,7 @@ internal sealed class ConjunctionScreeningPanel : Panel
 			return;
 		}
 
-		float height = Math.Min(ImGui.GetTextLineHeightWithSpacing() * (screened.Conjunctions.Count + 2), ImGui.GetContentRegionAvail().Y * 0.5f);
+		float height = ConjunctionTableHeight(screened.Conjunctions.Count);
 
 		if (!ImGui.BeginTable("conjunctions", 5, flags, new Vector2(0, height)))
 		{
@@ -366,6 +372,26 @@ internal sealed class ConjunctionScreeningPanel : Panel
 		ImGui.EndTable();
 	}
 
+	/// <summary>
+	/// Sizes the approaches table: every row when they fit, and otherwise as many whole rows as fit
+	/// above the room the storage-type comparison below it needs, so the last visible row is never cut
+	/// in half and the table does not resize when an approach is selected.
+	/// </summary>
+	private static float ConjunctionTableHeight(int count)
+	{
+		float line = ImGui.GetTextLineHeightWithSpacing();
+		float everyRow = line * (count + 2);
+		float room = ImGui.GetContentRegionAvail().Y - (line * ComparisonLines);
+
+		if (everyRow <= room)
+		{
+			return everyRow;
+		}
+
+		float rows = MathF.Max(MathF.Floor(room / line), MinimumTableLines);
+		return (rows * line) + (2.0f * ImGui.GetStyle().CellPadding.Y);
+	}
+
 	private void DrawComparison()
 	{
 		if (selectedRow < 0)
@@ -412,7 +438,7 @@ internal sealed class ConjunctionScreeningPanel : Panel
 				? "reference"
 				: Comparison.TimeDifferenceSeconds(run) is double seconds ? string.Create(culture, $"{seconds * 1e6:+0.000;-0.000} µs") : "—");
 			ImGui.TableNextColumn();
-			ImGui.TextUnformatted(string.Create(culture, $"{run.Seconds * 1000.0:F1} ms"));
+			ImGui.TextUnformatted(MeasuredDurations.Show(string.Create(culture, $"{run.Seconds * 1000.0:F1} ms")));
 		}
 
 		ImGui.EndTable();
