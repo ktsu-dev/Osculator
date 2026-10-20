@@ -299,8 +299,10 @@ internal sealed class DecompositionPanel : Panel
 
 	private static double D(PreciseNumber value) => double.CreateChecked(value);
 
-	private static string Describe(ElementSet elements) =>
-		elements.Epoch.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", Culture);
+	private static string Describe(ElementSet elements) => Describe(elements.Epoch);
+
+	private static string Describe(DateTime epoch) =>
+		epoch.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", Culture);
 
 	private static void Row(string term, string radial, string alongTrack, string crossTrack, string magnitude, string note)
 	{
@@ -374,7 +376,7 @@ internal sealed class DecompositionPanel : Panel
 
 		PreciseStorageMath math = new(ReferenceDigits);
 
-		ImGui.TextWrapped(string.Create(Culture, $"From {Describe(result.Elements)} to {Describe(result.Truth)}, {D(result.HorizonMinutes) / 1440.0:F2} days. Every term in km, in RIC, computed and accumulated in {ReferenceDigits}-digit PreciseNumber."));
+		ImGui.TextWrapped(string.Create(Culture, $"From {Describe(result.Elements)} to {Describe(result.Truth.Epoch)}, {D(result.HorizonMinutes) / 1440.0:F2} days. Every term in km, in RIC, computed and accumulated in {ReferenceDigits}-digit PreciseNumber."));
 
 		const ImGuiTableFlags Flags = ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit;
 
