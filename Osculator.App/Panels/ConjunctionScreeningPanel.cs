@@ -10,6 +10,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Numerics;
 using System.Threading;
+using System.Threading.Tasks;
 using Hexa.NET.ImGui;
 using ktsu.Osculator.App.Shell;
 using ktsu.Osculator.Core.Conjunction;
@@ -36,8 +37,15 @@ using ktsu.Osculator.Data.CelesTrak;
 /// </para>
 /// <para>
 /// The catalogue comes through a <see cref="CelesTrakClient"/> on the same cache directory and refetch
-/// interval as the catalogue panel, and is only asked for when a screen starts, so in practice it is
-/// read from the cache the catalogue panel already filled rather than fetched again.
+/// interval as the catalogue panel, and is asked for again every time a screen starts. Inside the
+/// refetch window that is a read of the copy on disk the catalogue panel already filled; past it, the
+/// cache goes back to CelesTrak, so a screen run days after the first one screens current element sets
+/// rather than the ones the session started with. The question a screen answers is what is close now,
+/// and an element set three days further from its epoch is a worse answer to it.
+/// </para>
+/// <para>
+/// When CelesTrak cannot be reached the cache serves its last good copy however old, and the summary
+/// says when that copy was fetched and that it is stale, rather than presenting it as current.
 /// </para>
 /// </remarks>
 internal sealed class ConjunctionScreeningPanel : Panel
@@ -61,13 +69,14 @@ internal sealed class ConjunctionScreeningPanel : Panel
 
 	private static readonly TimeSpan RefetchInterval = TimeSpan.FromHours(2);
 
+	private static readonly Vector4 StaleColour = new(1.0f, 0.65f, 0.2f, 1.0f);
+
 	private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(2) };
 
 	private static readonly Lazy<CelesTrakClient> Client = new(CreateClient, LazyThreadSafetyMode.ExecutionAndPublication);
 
 	private readonly ConjunctionProgress progress = new();
 
-	private IReadOnlyList<ElementSet>? catalogue;
 	private bool allAgainstAll;
 	private string groupTerm = "ISS";
 	private double thresholdKm = 10.0;
@@ -83,21 +92,32 @@ internal sealed class ConjunctionScreeningPanel : Panel
 	/// <summary>Gets the per-type measurement of the selected row, once it has finished.</summary>
 	internal PairComparison? Comparison { get; private set; }
 
+	/// <summary>
+	/// Gets or sets where a screen started from the controls reads its catalogue.
+	/// </summary>
+	/// <remarks>
+	/// The shared <see cref="CelesTrakClient"/> by default. It is called once per screen, never
+	/// remembered between them, and its <see cref="Fetched{T}"/> provenance reaches the result.
+	/// </remarks>
+	internal Func<CancellationToken, Task<Fetched<IReadOnlyList<ElementSet>>>> LoadCatalogue { get; set; } =
+		token => Client.Value.GetGroupAsync(CataloguePanel.Group, token);
+
 	/// <inheritdoc/>
 	protected override string Title => PanelTitle;
 
 	/// <summary>
 	/// Starts a screen of the selected object against a catalogue, without loading one.
 	/// </summary>
+	/// <remarks>
+	/// The catalogue is used for this screen only. A later screen from the controls loads its own
+	/// through <see cref="LoadCatalogue"/>, and the result carries no fetch time, since nothing was fetched.
+	/// </remarks>
 	/// <param name="primary">The object to screen.</param>
 	/// <param name="objects">The catalogue.</param>
 	/// <param name="options">The window and thresholds.</param>
 	/// <param name="startUtc">The window's start, for display.</param>
-	internal void StartScreen(ElementSet primary, IReadOnlyList<ElementSet> objects, ConjunctionScreenOptions options, DateTime startUtc)
-	{
-		catalogue = objects;
+	internal void StartScreen(ElementSet primary, IReadOnlyList<ElementSet> objects, ConjunctionScreenOptions options, DateTime startUtc) =>
 		Begin(token => ConjunctionSweep.SelectedAgainst(primary, objects, options, progress, token), startUtc);
-	}
 
 	/// <summary>
 	/// Starts the per-type measurement of one row of the latest screen.
@@ -234,13 +254,19 @@ internal sealed class ConjunctionScreeningPanel : Panel
 
 		if (ImGui.Button("Screen"))
 		{
-			StartFromControls(selected);
+			ScreenCatalogue(selected, allAgainstAll, groupTerm);
 		}
 
 		ImGui.EndDisabled();
 	}
 
-	private void StartFromControls(ElementSet? selected)
+	/// <summary>
+	/// Starts a screen against a freshly loaded catalogue, as the Screen button does.
+	/// </summary>
+	/// <param name="selected">The object to screen, when not screening all against all.</param>
+	/// <param name="group">Whether to screen all against all among the objects matching <paramref name="term"/>.</param>
+	/// <param name="term">The name term for all against all.</param>
+	internal void ScreenCatalogue(ElementSet? selected, bool group, string term)
 	{
 		DateTime startUtc = DateTime.UtcNow;
 		ConjunctionScreenOptions options = new()
@@ -250,33 +276,39 @@ internal sealed class ConjunctionScreeningPanel : Panel
 			ThresholdKm = thresholdKm,
 		};
 
-		IReadOnlyList<ElementSet>? loaded = catalogue;
-		bool group = allAgainstAll;
-		string term = groupTerm;
+		Func<CancellationToken, Task<Fetched<IReadOnlyList<ElementSet>>>> load = LoadCatalogue;
 
 		Begin(
 			token =>
 			{
-				IReadOnlyList<ElementSet> objects = loaded ?? Client.Value.GetGroupAsync(CataloguePanel.Group, token).GetAwaiter().GetResult().Value;
-				Volatile.Write(ref catalogue, objects);
+				Fetched<IReadOnlyList<ElementSet>> fetched = load(token).GetAwaiter().GetResult();
 
-				if (!group)
+				return Screen(fetched.Value, token) with
 				{
-					return ConjunctionSweep.SelectedAgainst(selected!, objects, options, progress, token);
-				}
-
-				IReadOnlyList<ElementSet> members = ConjunctionSweep.Group(objects, term);
-
-				if (members.Count > ConjunctionSweep.MaximumGroupSize)
-				{
-					throw new InvalidOperationException(string.Create(
-						CultureInfo.InvariantCulture,
-						$"{members.Count:N0} objects match \"{term}\". All against all is limited to {ConjunctionSweep.MaximumGroupSize}; narrow the name."));
-				}
-
-				return ConjunctionSweep.AllAgainstAll(members, options, progress, token);
+					CatalogueFetchedAt = fetched.FetchedAt,
+					CatalogueIsStale = fetched.IsStale,
+				};
 			},
 			startUtc);
+
+		ConjunctionSweepResult Screen(IReadOnlyList<ElementSet> objects, CancellationToken token)
+		{
+			if (!group)
+			{
+				return ConjunctionSweep.SelectedAgainst(selected!, objects, options, progress, token);
+			}
+
+			IReadOnlyList<ElementSet> members = ConjunctionSweep.Group(objects, term);
+
+			if (members.Count > ConjunctionSweep.MaximumGroupSize)
+			{
+				throw new InvalidOperationException(string.Create(
+					CultureInfo.InvariantCulture,
+					$"{members.Count:N0} objects match \"{term}\". All against all is limited to {ConjunctionSweep.MaximumGroupSize}; narrow the name."));
+			}
+
+			return ConjunctionSweep.AllAgainstAll(members, options, progress, token);
+		}
 	}
 
 	private void Begin(Func<CancellationToken, ConjunctionSweepResult> work, DateTime startUtc)
@@ -309,6 +341,45 @@ internal sealed class ConjunctionScreeningPanel : Panel
 		ImGui.TextUnformatted(string.Create(
 			culture,
 			$"{screened.PairCount:N0} pairs · {screened.PairsRejectedByFilter:N0} rejected by the shell filter ({rejected:F1}%) · {screened.PairsPropagated:N0} propagated in double"));
+
+		if (DescribeCatalogue(screened, windowStartUtc) is string provenance)
+		{
+			if (screened.CatalogueIsStale)
+			{
+				ImGui.TextColored(StaleColour, provenance);
+			}
+			else
+			{
+				ImGui.TextUnformatted(provenance);
+			}
+		}
+	}
+
+	/// <summary>
+	/// Describes when the screened catalogue was fetched, and whether it was a stale fallback.
+	/// </summary>
+	/// <param name="screened">The screen.</param>
+	/// <param name="startUtc">The window's start, against which the catalogue's age is given.</param>
+	/// <returns>The line, or <see langword="null"/> when the catalogue was supplied rather than fetched.</returns>
+	internal static string? DescribeCatalogue(ConjunctionSweepResult screened, DateTime startUtc)
+	{
+		Ensure.NotNull(screened);
+
+		if (screened.CatalogueFetchedAt is not DateTimeOffset fetchedAt)
+		{
+			return null;
+		}
+
+		CultureInfo culture = CultureInfo.InvariantCulture;
+		double hours = Math.Max(0.0, (new DateTimeOffset(startUtc, TimeSpan.Zero) - fetchedAt).TotalHours);
+		string age = hours < 48.0
+			? string.Create(culture, $"{hours:F1} h")
+			: string.Create(culture, $"{hours / 24.0:F1} days");
+		string line = string.Create(culture, $"Catalogue fetched {fetchedAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC, {age} before the window");
+
+		return screened.CatalogueIsStale
+			? line + " · STALE: CelesTrak could not be reached, so this is the last good copy"
+			: line;
 	}
 
 	private void DrawConjunctions(ConjunctionSweepResult screened)
