@@ -294,6 +294,11 @@ by **1.6e-12 km**, `decimal` by 3e-26 km. The subtraction itself is exact; what 
 states' own absolute rounding as the whole answer, which is the spec's cancellation case.
 `ClosestApproach<T>` keeps the states so storage types can be compared in `T`; never compare two
 `PropagatedState`s for this.
+The scan propagates each object once per grid sample, not once per pair (#126), holding at most
+`ConjunctionScreenOptions.MaximumCachedStates` states and taking larger sets in blocks; the output
+is byte-identical to the pair-by-pair scan, and 400 objects over a day went from 78 s to 6.0 s on
+one core. `ScreenAgainst` is the one-against-a-catalogue form, and both take progress and a
+cancellation token.
 The panel (`Osculator.App/Panels/ConjunctionScreeningPanel.cs`, logic in `ConjunctionSweep`)
 screens in `double` only, either the selected object against the catalogue or all against all
 among up to 400 objects matched by name; selecting a row re-finds that one approach in all four
