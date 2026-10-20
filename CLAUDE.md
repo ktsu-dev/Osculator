@@ -223,6 +223,10 @@ over it as vectors, in `double` with `EarthOrientation.Ignored` — a picture, n
 are coloured by Δ_arith (`float` or `decimal` against `double`) on a log scale. `GlobeTests` checks
 it against physics rather than snapshots: the ISS track peaks between 51.6° and 52.0° geodetic, and
 each ascending node falls 23.6° ± 0.3° west of the last.
+The selected object's orbit ribbon (`OrbitRibbon`) is one revolution with every sample rotated by
+the Earth of the instant shown, not its own, and drawn at its altitude on the globe; after one
+period it is back within 28 km of its start (J2's node regression), where the ground track over
+the same revolution is 2,640 km away. `OrbitRibbonTests` asserts both.
 
 **The M2 number exists: the ISS diverges by 10.9 km over a week.** `Divergence<T>` propagates an
 archived element set to a later set's epoch, evaluates the later set at its own epoch, and resolves
