@@ -310,6 +310,18 @@ internal sealed record ConjunctionSweepResult(
 {
 	/// <summary>Gets the pairs the shell pre-filter rejected without propagating them.</summary>
 	internal long PairsRejectedByFilter => PairCount - PairsPropagated;
+
+	/// <summary>
+	/// Gets when the screened catalogue was fetched from its source, or <see langword="null"/> when the
+	/// caller supplied the objects directly.
+	/// </summary>
+	internal DateTimeOffset? CatalogueFetchedAt { get; init; }
+
+	/// <summary>
+	/// Gets a value indicating whether the screened catalogue was a stale fallback: the last good copy,
+	/// served because the source could not be reached.
+	/// </summary>
+	internal bool CatalogueIsStale { get; init; }
 }
 
 /// <summary>
