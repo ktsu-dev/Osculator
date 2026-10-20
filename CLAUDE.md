@@ -70,15 +70,15 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
-"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
-path to the network for the CelesTrak, IERS, Space-Track and Horizons clients: overlapping callers
-for a key share one request, a failed request is throttled (the whole window when a stale copy
-exists, `FailureBackoff` when nothing does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
-(1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
-memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
-`IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
-ends earlier than the copy it would replace, because a truncated CSV still parses. Each of those
-was mutation-checked the same way: reverting any one fails at least one test.
+"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one path
+to the network for the CelesTrak, IERS, Space-Track and Horizons clients: overlapping callers for a
+key share one request, a failed request is throttled (the whole window when a stale copy exists,
+`FailureBackoff` when nothing does), a stamp from the future is stale, the window cannot be set
+below `MinimumAllowedAge` (1 h), writes are temp-file-and-rename, and a cache that cannot be written
+keeps the response in memory rather than failing the call. Every result is a `Fetched<T>` carrying
+`FetchedAt` and `IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a
+download that ends earlier than the copy it would replace, because a truncated CSV still parses.
+Each of those was mutation-checked the same way: reverting any one fails at least one test.
 
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
 every usable case in the verification set, perturbs each element field by half the step its
