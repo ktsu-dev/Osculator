@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Numerics;
 using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Core.Frames;
 using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Time;
 
@@ -100,29 +101,36 @@ public readonly record struct DataTermEnsemble<TReference>(
 /// </summary>
 /// <typeparam name="TReference">The reference arithmetic every term is computed and expressed in.</typeparam>
 /// <param name="Elements">The element set the prediction is made from (element set A).</param>
-/// <param name="Truth">The element set taken as truth, evaluated at its own epoch (A + Δt).</param>
+/// <param name="Truth">The state taken as truth at A + Δt, already in TEME, and where it came from.</param>
 /// <param name="HorizonMinutes">Δt: how far <paramref name="Elements"/> was propagated, in minutes.</param>
 /// <param name="Error">
 /// Why the reference prediction or the truth failed to propagate, or <see cref="Sgp4Error.None"/>.
 /// When this is set the three terms are not computed and hold their defaults.
 /// </param>
 /// <param name="Model">
-/// Δ_model: the reference prediction minus the truth, in the truth's RIC frame. The same number
-/// <see cref="Divergence{T}.Between"/> reports, because it is that routine.
+/// Δ_model: the reference prediction minus the truth, in the truth's RIC frame. Against a later
+/// element set it is the same number <see cref="Divergence{T}.Between"/> reports, because it is that
+/// routine.
 /// </param>
 /// <param name="Data">Δ_data: the Monte Carlo spread of the prediction over the element set's quantization.</param>
 /// <param name="Arithmetic">
 /// Δ_arith for <see langword="float"/>, <see langword="double"/>, <see langword="decimal"/> and the
 /// reference arithmetic itself, in that order. The last is the harness check and is exactly zero.
 /// </param>
+/// <param name="Orientation">
+/// The Earth-orientation share of Δ_data, per IERS parameter, for an Earth-fixed truth: how far the
+/// truth itself moves when the pole and UT1 − UTC are each taken one sigma either way. Empty for any
+/// other truth, which does not depend on them.
+/// </param>
 public sealed record DecompositionResult<TReference>(
 	ElementSet Elements,
-	ElementSet Truth,
+	TruthState<TReference> Truth,
 	TReference HorizonMinutes,
 	Sgp4Error Error,
 	RswResidual<TReference> Model,
 	DataTermEnsemble<TReference> Data,
-	IReadOnlyList<ArithmeticTerm<TReference>> Arithmetic)
+	IReadOnlyList<ArithmeticTerm<TReference>> Arithmetic,
+	IReadOnlyList<EarthOrientationTerm.Contribution> Orientation)
 	where TReference : struct, INumber<TReference>
 {
 	/// <summary>Gets a value indicating whether the reference prediction and the truth both propagated.</summary>
@@ -136,6 +144,28 @@ public sealed record DecompositionResult<TReference>(
 
 	/// <summary>Gets the reference arithmetic measured against itself: the term that validates the harness.</summary>
 	public ArithmeticTerm<TReference> ReferenceAgainstItself => Arithmetic[^1];
+
+	/// <summary>Gets the Earth-orientation share of Δ_data, combined in quadrature, in kilometres. Zero unless the truth is Earth-fixed.</summary>
+	public double OrientationKilometers => EarthOrientationTerm.CombineInQuadrature(Orientation);
+
+	/// <summary>
+	/// Gets the whole of Δ_data, in kilometres: the element set's quantization and, for an Earth-fixed
+	/// truth, the Earth's orientation, combined in quadrature.
+	/// </summary>
+	/// <remarks>
+	/// In quadrature because the two are independent: one is the digits on the element set's page, the
+	/// other the IERS's uncertainty about the Earth, and neither knows about the other. Spec §11 is why
+	/// the second is here at all: left out, an SP3 residual would count it as model error.
+	/// </remarks>
+	public double DataKilometers
+	{
+		get
+		{
+			double ensemble = double.CreateChecked(Data.RmsMagnitude);
+			double orientation = OrientationKilometers;
+			return Math.Sqrt((ensemble * ensemble) + (orientation * orientation));
+		}
+	}
 }
 
 /// <summary>
@@ -151,10 +181,14 @@ public sealed record DecompositionResult<TReference>(
 /// </para>
 /// <list type="bullet">
 /// <item><description>
-/// <strong>Δ_model</strong> — the reference SGP4 from element set A, against truth at A + Δt. Truth is
-/// a later element set, evaluated at its own epoch. That truth is not the orbit: it is another fit of
-/// the same model, so Δ_model here includes the fit residuals of both sets and is an upper bound on
-/// SGP4's own error. An SP3 or Horizons truth replaces the later set when those clients exist.
+/// <strong>Δ_model</strong> — the reference SGP4 from element set A, against truth at A + Δt, in the
+/// truth's RIC frame. Truth is one of three things (<see cref="TruthState{T}"/>). A later element set,
+/// evaluated at its own epoch, is not the orbit: it is another fit of the same model, so Δ_model
+/// against it includes the fit residuals of both sets and is an upper bound on SGP4's own error. A
+/// precise orbit — an SP3 file in the ITRF, read through <see cref="Sp3Truth{T}"/> — or a Horizons
+/// vector in the GCRF is the orbit to centimetres, so Δ_model against either is SGP4's error and the
+/// fit of the one set, and nothing of a second. Either is rotated into TEME before it is compared,
+/// which changes no RIC component: the basis turns with the state it is built from.
 /// </description></item>
 /// <item><description>
 /// <strong>Δ_data</strong> — Monte Carlo. Each field is perturbed independently and uniformly within
@@ -163,7 +197,9 @@ public sealed record DecompositionResult<TReference>(
 /// perturbs one field at a time by exactly half a step and combines in quadrature. Both are honest;
 /// they answer slightly different questions, and this one is the spec's. Expect it to read about
 /// 1/√3 of <see cref="DataTerm"/>'s figure: a uniform rounding error has an RMS of 1/√12 of a step,
-/// against the half step <see cref="DataTerm"/> uses.
+/// against the half step <see cref="DataTerm"/> uses. For an Earth-fixed truth the Earth's orientation
+/// is uncertain too, and that share (<see cref="EarthOrientationTerm"/>) is folded in beside the
+/// ensemble rather than left to be read as model error (spec §11).
 /// </description></item>
 /// <item><description>
 /// <strong>Δ_arith(T)</strong> — the same element set propagated over the same horizon in each storage
@@ -185,7 +221,7 @@ public static class Decomposition<TReference>
 	private const int MinutesPerDay = 1440;
 
 	/// <summary>
-	/// Decomposes the gap between <paramref name="elements"/>' prediction and <paramref name="truth"/>.
+	/// Decomposes the gap between <paramref name="elements"/>' prediction and a later element set.
 	/// </summary>
 	/// <param name="elements">Element set A, the one the prediction is made from.</param>
 	/// <param name="truth">A later element set for the same object, taken as truth at its own epoch.</param>
@@ -206,29 +242,114 @@ public static class Decomposition<TReference>
 		Ensure.NotNull(elements);
 		Ensure.NotNull(truth);
 		Ensure.NotNull(reference);
-		options ??= DecompositionOptions.Default;
-
-		if (options.Samples <= 0)
-		{
-			throw new ArgumentException($"The ensemble needs at least one sample; {options.Samples} were asked for.", nameof(options));
-		}
+		options = Validate(options);
 
 		// Δ_model, through the routine that defines it, so the decomposition and the M2 number can
 		// never disagree about what the model term is. It also validates the pair.
 		ElementSetDivergence<TReference> model = Divergence<TReference>.Between(elements, truth, reference);
+		(TruthState<TReference>? state, Sgp4Error truthError) = TruthState<TReference>.FromElementSet(truth, reference);
 
-		if (!model.IsSuccess)
+		if (!model.IsSuccess || state is null)
 		{
-			return new DecompositionResult<TReference>(elements, truth, model.HorizonMinutes, model.Error, default, default, []);
+			TruthState<TReference> unevaluated = state ?? new TruthState<TReference>(
+				TruthSource.ElementSet, truth.Epoch, truth.EpochJulianDate, default, EarthOrientation.Ignored, truth);
+			return Failed(elements, unevaluated, model.HorizonMinutes, model.IsSuccess ? truthError : model.Error);
 		}
 
+		return Decompose(elements, state, model.HorizonMinutes, model.Residual, reference, options);
+	}
+
+	/// <summary>
+	/// Decomposes the gap between <paramref name="elements"/>' prediction and a state taken as truth:
+	/// a precise orbit, a Horizons vector, or a state built by hand.
+	/// </summary>
+	/// <param name="elements">Element set A, the one the prediction is made from.</param>
+	/// <param name="truth">The truth at A + Δt, already in TEME (see <see cref="TruthState{T}"/>).</param>
+	/// <param name="reference">The reference arithmetic.</param>
+	/// <param name="options">The ensemble size and seed, or <see langword="null"/> for the defaults.</param>
+	/// <returns>The three terms. Carries an error rather than throwing when SGP4 refuses.</returns>
+	/// <exception cref="ArgumentNullException">An argument is null.</exception>
+	/// <exception cref="ArgumentException">
+	/// The truth is not after <paramref name="elements"/>' epoch, the ensemble size is not positive, or
+	/// the truth is Earth-fixed and its orientation states no sigma (see <see cref="EarthOrientationTerm"/>).
+	/// </exception>
+	/// <remarks>
+	/// Nothing checks that the truth is the same object as the element set, because a precise orbit
+	/// carries no catalogue number. Pairing them is the caller's job.
+	/// </remarks>
+	public static DecompositionResult<TReference> Compute(
+		ElementSet elements,
+		TruthState<TReference> truth,
+		IStorageMath<TReference> reference,
+		DecompositionOptions? options = null)
+	{
+		Ensure.NotNull(elements);
+		Ensure.NotNull(truth);
+		Ensure.NotNull(reference);
+		options = Validate(options);
+
+		TReference horizon = MinutesBetween<TReference>(elements.EpochJulianDate, truth.EpochJulianDate);
+
+		if (horizon <= TReference.Zero)
+		{
+			throw new ArgumentException(
+				$"The truth's epoch ({truth.Epoch:O}) is not after the element set's ({elements.Epoch:O}).",
+				nameof(truth));
+		}
+
+		Sgp4Result<TReference> prediction = Sgp4<TReference>.Propagate(Sgp4<TReference>.Initialize(elements, reference), horizon, reference);
+
+		return prediction.IsSuccess
+			? Decompose(elements, truth, horizon, RswResidual<TReference>.Between(truth.State, prediction.State, reference), reference, options)
+			: Failed(elements, truth, horizon, prediction.Error);
+	}
+
+	/// <summary>Applies the defaults and refuses an empty ensemble.</summary>
+	/// <param name="options">The options asked for, or <see langword="null"/>.</param>
+	/// <returns>The options to run with.</returns>
+	private static DecompositionOptions Validate(DecompositionOptions? options)
+	{
+		options ??= DecompositionOptions.Default;
+
+		return options.Samples <= 0
+			? throw new ArgumentException($"The ensemble needs at least one sample; {options.Samples} were asked for.", nameof(options))
+			: options;
+	}
+
+	/// <summary>A result that carries only why it could not be computed.</summary>
+	/// <param name="elements">Element set A.</param>
+	/// <param name="truth">The truth.</param>
+	/// <param name="horizon">The horizon, in minutes.</param>
+	/// <param name="error">Why SGP4 refused.</param>
+	/// <returns>The result, with every term at its default.</returns>
+	private static DecompositionResult<TReference> Failed(ElementSet elements, TruthState<TReference> truth, TReference horizon, Sgp4Error error) =>
+		new(elements, truth, horizon, error, default, default, [], []);
+
+	/// <summary>
+	/// Computes the data and arithmetic terms around a model term already taken.
+	/// </summary>
+	/// <param name="elements">Element set A.</param>
+	/// <param name="truth">The truth.</param>
+	/// <param name="horizon">The horizon, in minutes.</param>
+	/// <param name="model">Δ_model.</param>
+	/// <param name="reference">The reference arithmetic.</param>
+	/// <param name="options">The ensemble size and seed.</param>
+	/// <returns>The three terms.</returns>
+	private static DecompositionResult<TReference> Decompose(
+		ElementSet elements,
+		TruthState<TReference> truth,
+		TReference horizon,
+		RswResidual<TReference> model,
+		IStorageMath<TReference> reference,
+		DecompositionOptions options)
+	{
 		// The reference prediction: the frame both other terms are resolved in.
 		Sgp4Result<TReference> prediction = Sgp4<TReference>.Propagate(
-			Sgp4<TReference>.Initialize(elements, reference), model.HorizonMinutes, reference);
+			Sgp4<TReference>.Initialize(elements, reference), horizon, reference);
 
 		if (!prediction.IsSuccess)
 		{
-			return new DecompositionResult<TReference>(elements, truth, model.HorizonMinutes, prediction.Error, default, default, []);
+			return Failed(elements, truth, horizon, prediction.Error);
 		}
 
 		JulianDate target = truth.EpochJulianDate;
@@ -244,11 +365,43 @@ public static class Decomposition<TReference>
 		return new DecompositionResult<TReference>(
 			elements,
 			truth,
-			model.HorizonMinutes,
+			horizon,
 			Sgp4Error.None,
-			model.Residual,
+			model,
 			Ensemble(elements, target, prediction.State, reference, options),
-			arithmetic);
+			arithmetic,
+			OrientationOf(truth));
+	}
+
+	/// <summary>
+	/// Measures how far an Earth-fixed truth moves with the IERS's stated uncertainty in the Earth's
+	/// orientation.
+	/// </summary>
+	/// <param name="truth">The truth.</param>
+	/// <returns>Each orientation parameter's contribution, or none for a truth that is not Earth-fixed.</returns>
+	/// <remarks>
+	/// Measured on the truth rather than the prediction, because the truth is the state that went
+	/// through the Earth-fixed frame and the prediction never did. In <see langword="double"/>, as
+	/// <see cref="EarthOrientationTerm"/> always is: the term is centimetres to metres, nine orders
+	/// above the arithmetic error of the type measuring it.
+	/// </remarks>
+	private static IReadOnlyList<EarthOrientationTerm.Contribution> OrientationOf(TruthState<TReference> truth)
+	{
+		if (!truth.IsEarthFixed)
+		{
+			return [];
+		}
+
+		TemeState<TReference> s = truth.State;
+		TemeState<double> state = new(
+			double.CreateChecked(s.X),
+			double.CreateChecked(s.Y),
+			double.CreateChecked(s.Z),
+			double.CreateChecked(s.VelocityX),
+			double.CreateChecked(s.VelocityY),
+			double.CreateChecked(s.VelocityZ));
+
+		return EarthOrientationTerm.Measure(state, truth.EpochJulianDate, truth.Orientation, DoubleStorageMath.Instance);
 	}
 
 	/// <summary>
