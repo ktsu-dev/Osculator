@@ -24,10 +24,12 @@ using ktsu.Osculator.Core.Propagation;
 /// at fifty digits, where both are exact.
 /// </para>
 /// <para>
-/// The body's position and the satellite's have to be in the same frame. Horizons vectors are
-/// ICRF, an SGP4 state is TEME; until the TEME → GCRF transform exists, mixing them misplaces the
-/// Moon by up to a third of a degree, which changes its pull on a LEO satellite by under one part
-/// in a hundred of an acceleration that is itself ten million times smaller than gravity.
+/// The body's position and the satellite's have to be in the same frame; nothing here can check
+/// that. Horizons vectors are ICRF and an SGP4 state is TEME, and mixing them misplaces the Sun
+/// and the Moon by the precession since J2000 — about 0.36° in 2026. For an integration started
+/// from an SGP4 state, build the ephemeris with <c>HorizonsBodyEphemeris.CreateInTeme</c>, which
+/// rotates each row through <see cref="Frames.GcrfFrame{T}.ToTeme(Frames.GcrfState{T}, Time.JulianDate, Frames.CelestialPoleOffsets, IStorageMath{T})"/>
+/// at its own epoch.
 /// </para>
 /// </remarks>
 public sealed class ThirdBodyGravity<T> : IForceModel<T>
