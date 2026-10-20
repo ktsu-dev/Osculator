@@ -277,6 +277,13 @@ Three things to take from it, all asserted:
    the set was read from (`ElementFieldQuantization.For`), so the committed OMM snapshots draw from
    the JSON's finer eccentricity and B* rather than the two-line text's.
 
+**The decomposition is in the app.** `Panels/DecompositionPanel.cs` runs `Decomposition<T>` in 30-digit
+`PreciseNumber` on the work queue for the selected object, between two sets from its archived history
+(the two newest by default), and shows the reference-against-itself row as "0, every digit". The
+history comes from `Panels/SnapshotFeed.cs`, which polls the CelesTrak response cache once a minute
+and offers every changed body to a `SnapshotStore` under the app's data directory, so every set any
+panel fetches is archived without the clients knowing. With fewer than two sets the panel says why.
+
 **Residual statistics are accumulated in the storage type, with no compensation.**
 `ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
 `ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
