@@ -108,7 +108,7 @@ public sealed class KeplerDemoPanelTests : IDisposable
 		AssertMolniyaShape(panel.Result);
 
 		panel.Select(0.99, 0.1);
-		Assert.IsTrue(harness.StepUntil(() => panel.Result!.Eccentricity == 0.99, 5000), "A changed input never produced a new run.");
+		Assert.IsTrue(harness.StepUntil(() => Math.Abs(panel.Result!.Eccentricity - 0.99) < 1e-12, 5000), "A changed input never produced a new run.");
 		Assert.IsFalse(panel.Result!.Runs[0].NaiveConverged);
 
 		harness.Step(2);
