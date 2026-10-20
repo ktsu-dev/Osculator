@@ -72,8 +72,8 @@ age term fails one. A cache test never seen to fail is not evidence of a cache.
 
 "Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
 path to the network for the CelesTrak, IERS, Space-Track and Horizons clients: overlapping callers
-for a key share one request, a failed request is throttled (the whole window when a stale copy exists, `FailureBackoff` when nothing
-does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
+for a key share one request, a failed request is throttled (the whole window when a stale copy
+exists, `FailureBackoff` when nothing does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
 (1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
 memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
 `IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
