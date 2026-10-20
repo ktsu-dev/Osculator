@@ -158,20 +158,11 @@ internal sealed class CatalogueLoader(CelesTrakClient celesTrak, SatcatClient sa
 	/// </summary>
 	/// <param name="groups">The element sets, in any order and with any overlap.</param>
 	/// <returns>One element set per catalogue number.</returns>
-	internal static IReadOnlyList<ElementSet> Merge(IEnumerable<IReadOnlyList<ElementSet>> groups)
-	{
-		Dictionary<int, ElementSet> merged = [];
-
-		foreach (ElementSet set in groups.SelectMany(group => group))
-		{
-			if (!merged.TryGetValue(set.NoradCatalogId, out ElementSet? kept) || set.Epoch > kept.Epoch)
-			{
-				merged[set.NoradCatalogId] = set;
-			}
-		}
-
-		return [.. merged.Values];
-	}
+	internal static IReadOnlyList<ElementSet> Merge(IEnumerable<IReadOnlyList<ElementSet>> groups) =>
+		[.. groups
+			.SelectMany(group => group)
+			.GroupBy(set => set.NoradCatalogId)
+			.Select(sets => sets.MaxBy(set => set.Epoch)!)];
 
 	/// <summary>Loads and merges CelesTrak's groups.</summary>
 	/// <param name="notes">Where a group that did not load is recorded.</param>
