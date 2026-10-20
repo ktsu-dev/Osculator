@@ -60,6 +60,27 @@ public sealed record ConjunctionScreenOptions
 	/// </remarks>
 	public double TimeToleranceMinutes { get; init; } = 1e-9;
 
+	/// <summary>
+	/// Gets the most propagated states the scan holds at once, summed over every object it has on hand.
+	/// </summary>
+	/// <remarks>
+	/// <para>
+	/// The scan propagates each object once over the grid and reads every pair from those states,
+	/// rather than propagating both objects again for every pair they are in. That trades calls for
+	/// memory: a one-day window at the default step is 1,441 states per object, about 69 kB in
+	/// <see langword="double"/>, so four hundred objects fit in 28 MB but a catalogue of ten thousand
+	/// would want 690 MB.
+	/// </para>
+	/// <para>
+	/// When the objects do not fit, they are taken in blocks of at most half this many states each,
+	/// two blocks at a time, and a block is propagated again for each block it is paired with. The
+	/// default, 2²¹ states, is about 100 MB in <see langword="double"/> and holds every object of
+	/// a group of over seven hundred for a day. The answer does not depend on it; only how many
+	/// propagations it takes does.
+	/// </para>
+	/// </remarks>
+	public int MaximumCachedStates { get; init; } = 1 << 21;
+
 	/// <summary>Validates the options.</summary>
 	/// <exception cref="ArgumentOutOfRangeException">A value is out of range.</exception>
 	public void Validate()
@@ -87,6 +108,11 @@ public sealed record ConjunctionScreenOptions
 		if (!double.IsFinite(TimeToleranceMinutes) || TimeToleranceMinutes <= 0.0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(TimeToleranceMinutes), TimeToleranceMinutes, "The time tolerance must be finite and positive.");
+		}
+
+		if (MaximumCachedStates <= 0)
+		{
+			throw new ArgumentOutOfRangeException(nameof(MaximumCachedStates), MaximumCachedStates, "The state budget must be positive.");
 		}
 	}
 }
