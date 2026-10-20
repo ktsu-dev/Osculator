@@ -680,6 +680,10 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    GPS at 15-minute spacing, 1.5 mm for LAGEOS-1 at 2 minutes — which is the file's own millimetre
    resolution, not the polynomial. Within half a window of either end the window cannot be centred
    and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
+   It refuses inside a gap too (#129): a step longer than 2.5 nominal spacings (the median step)
+   means epochs the file marked missing, and each run between gaps is read as a table of its own, so
+   beside a gap the window slides inwards as at an end. One missing epoch is bridged, since that is
+   the doubled step every held-out measurement above already crosses (`Sp3InterpolatorGapTests`).
    Thirty-digit arithmetic moves none of these by more than a few nanometres.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
