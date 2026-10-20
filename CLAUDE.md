@@ -359,6 +359,25 @@ It costs about twelve seconds, because it sweeps the whole verification set twic
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
 
+**Demonstration 2 is measured: `float` cannot represent a residual against laser ranging.**
+`TabulatedTruthResidual<T>` runs SGP4, the SP3 interpolation, the ITRF → TEME rotation and the
+difference all in one storage type, and `FloatQuantizationTests` runs it over the committed ILRS
+LAGEOS-1 hour at 5 s spacing. At LAGEOS's 12,270 km the `float` step is **2⁻¹⁰ km = 0.9766 m**,
+not the spec's 0.5 m, which is the LEO figure one binade down. Three things, all asserted:
+
+1. **Every TEME component of the `float` residual is a whole number of steps, exactly**, at every
+   one of 721 samples. Each state is on the lattice and the difference of two nearby ones is exact.
+2. **The `double` states stored as `float` make a staircase**: within one step of the `double`
+   residual, moving in whole steps on about a third of samples. That is representation alone.
+3. **`float` end to end scatters up to 33.6 m from `double`**, across 67–224 levels per component,
+   while `double` moves at most 117 mm per sample with a second difference under 0.7 mm.
+
+The element set is **fitted to the same hour**, not published (no public LAGEOS-1 set for
+2021-12-30 is available without Space-Track): 8.6 m RMS, 17 m worst after two-line rounding.
+The lattice depends on the radius, not on the element set. The panel (`FloatQuantizationPanel`)
+plots all three series per component; it samples no closer than 10 s, because 721 samples outgrow
+the 65,536 vertices one ImGui draw list can index and ImGui aborts the process.
+
 **Demonstration 4 is measured: round-off accumulated over a thirty-day integrated arc.**
 `Cowell<T>` integrates under any `IForceModel<T>` with the Prince–Dormand RK8(7)13M pair
 (`DormandPrince87<T>`), and `CowellRoundOffTests` runs a two-body LEO arc in fixed 120-second steps

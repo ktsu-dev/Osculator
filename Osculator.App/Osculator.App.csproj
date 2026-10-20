@@ -26,6 +26,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The float quantization panel's truth: the committed LAGEOS-1 laser-ranging hour, linked
+         from the test data rather than copied, so there is one copy of it. -->
+    <EmbeddedResource Include="..\Osculator.Tests\Data\Sp3\lageos1-excerpt.sp3" LogicalName="ktsu.Osculator.App.Data.lageos1-excerpt.sp3" Link="Data\lageos1-excerpt.sp3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Osculator.Data\Osculator.Data.csproj" />
   </ItemGroup>
 
