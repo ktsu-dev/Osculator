@@ -21,8 +21,9 @@ using ktsu.Osculator.Core.Time;
 /// <see cref="EarthFixedFrame{T}"/>. So the Earth-fixed forces — the harmonics, and the co-rotating
 /// atmosphere drag sees — are oriented correctly when the integration runs in TEME, the frame an
 /// SGP4 state arrives in. Polar motion is left out: it tilts the field by about a third of an
-/// arcsecond, which moves a LEO acceleration by parts in 10¹¹. Integrating in GCRF needs
-/// precession and nutation as well, which wait on the TEME → GCRF transform.
+/// arcsecond, which moves a LEO acceleration by parts in 10¹¹. Integrating in the GCRF would need
+/// precession and nutation as well; <see cref="GcrfFrame{T}"/> has them, but this rotation does not
+/// apply them, so integrate in TEME and give the third bodies TEME positions to match.
 /// </para>
 /// </remarks>
 public readonly record struct EarthRotation<T>(T AngleAtEpochRadians, T RateRadiansPerSecond)

@@ -41,8 +41,8 @@ public enum HorizonsTimeScale
 /// <remarks>
 /// <para>
 /// The axes are the ICRF's, with its equator as the reference plane. That is <strong>not</strong>
-/// TEME, the frame SGP4 answers in: comparing these with a propagated state needs the TEME → GCRF
-/// transform, which does not exist yet.
+/// TEME, the frame SGP4 answers in: comparing these with a propagated state goes through
+/// <c>GcrfFrame.ToTeme</c>, which is what <c>HorizonsBodyEphemeris.CreateInTeme</c> does.
 /// </para>
 /// <para>
 /// The epoch is split from the text rather than parsed as one number, for the same reason
