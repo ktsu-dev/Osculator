@@ -88,7 +88,7 @@ internal sealed class CowellRoundOffPanel : Panel
 	protected override void OnDismissed() => Work.Cancel(MeasureKey);
 
 	private static string Kilometres(double km) =>
-		km == 0.0 ? "0" : km.ToString("0.000e+00", CultureInfo.InvariantCulture);
+		km.ToString("0.000e+00", CultureInfo.InvariantCulture);
 
 	private static void DrawTable(CowellRoundOffResult result)
 	{
