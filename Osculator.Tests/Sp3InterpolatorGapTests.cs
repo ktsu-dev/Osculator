@@ -162,7 +162,7 @@ public sealed class Sp3InterpolatorGapTests
 
 		for (int i = 0; i < uniform.Length; i++)
 		{
-			uniform[i] = new(i, i, 2 * i, 3 * i);
+			uniform[i] = new(i, i, 2.0 * i, 3.0 * i);
 		}
 
 		List<TabulatedPosition<double>> table = Without(Without(uniform, 18, 3), 12, 3);
