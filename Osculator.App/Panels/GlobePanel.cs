@@ -14,7 +14,8 @@ using ktsu.Osculator.App.Globe;
 using ktsu.Osculator.Core.Elements;
 
 /// <summary>
-/// The Earth with every object on it: ground tracks, and dots coloured by residual magnitude.
+/// The Earth with every object on it: ground tracks, the selected object's orbit ribbon, and dots
+/// coloured by residual magnitude.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -62,6 +63,8 @@ internal static class GlobePanel
 	private static readonly Dictionary<GlobeObject, (DateTime Centre, int SpanMinutes, List<List<TrackPoint>> Runs)> Tracks = [];
 	private static readonly Dictionary<GlobeObject, (DateTime Instant, GlobeResidual Kind, double? Kilometers)> Residuals = [];
 
+	private static (GlobeObject? Item, DateTime Instant, List<TrackPoint> Points) ribbon = (null, default, []);
+
 	private static MapProjection projection = MapProjection.Equirectangular;
 	private static GlobeResidual residualKind = GlobeResidual.FloatVersusDouble;
 	private static DateTime instantUtc = DateTime.UtcNow;
@@ -69,6 +72,7 @@ internal static class GlobePanel
 	private static int speedIndex;
 	private static int trackSpanMinutes = 90;
 	private static bool showNight = true;
+	private static bool showRibbon = true;
 	private static bool followSelected = true;
 	private static float centreLatitude;
 	private static float centreLongitude;
@@ -143,6 +147,7 @@ internal static class GlobePanel
 		speedIndex = 0;
 		trackSpanMinutes = 90;
 		showNight = true;
+		showRibbon = true;
 		followSelected = true;
 		centreLatitude = 0f;
 		centreLongitude = 0f;
@@ -229,6 +234,8 @@ internal static class GlobePanel
 
 		ImGui.SameLine();
 		ImGui.Checkbox("Night", ref showNight);
+		ImGui.SameLine();
+		ImGui.Checkbox("Orbit", ref showRibbon);
 
 		if (projection == MapProjection.Orthographic)
 		{
@@ -431,6 +438,11 @@ internal static class GlobePanel
 			}
 		}
 
+		if (showRibbon && selected >= 0 && selected < Objects.Count)
+		{
+			DrawRibbon(drawList, view, Objects[selected], ToScreen);
+		}
+
 		Vector2 mouse = ImGui.GetIO().MousePos;
 		int hovered = -1;
 		float hoveredDistance = 8f;
@@ -480,6 +492,35 @@ internal static class GlobePanel
 				selected = hovered;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Draws one revolution of the selected object's orbit as a translucent band with a bright core,
+	/// in a colour no ground track uses, so the closed loop in space reads apart from the track
+	/// walking west over the ground.
+	/// </summary>
+	private static void DrawRibbon(ImDrawListPtr drawList, MapView view, GlobeObject item, Func<Vector2, Vector2> toScreen)
+	{
+		DateTime second = new(instantUtc.Ticks - (instantUtc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+
+		if (!ReferenceEquals(ribbon.Item, item) || ribbon.Instant != second)
+		{
+			ribbon = (item, second, OrbitRibbon.Sample(item.Elements, item.AsDouble, second));
+		}
+
+		List<List<Vector2>> lines = OrbitRibbon.Project(view, ribbon.Points);
+		uint band = Pack(90, 200, 255, 60);
+		uint core = Pack(150, 225, 255, 220);
+
+		foreach (List<Vector2> line in lines)
+		{
+			for (int p = 1; p < line.Count; p++)
+			{
+				drawList.AddLine(toScreen(line[p - 1]), toScreen(line[p]), band, 7f);
+			}
+		}
+
+		DrawLines(drawList, lines, toScreen, core);
 	}
 
 	private static void DrawGraticule(ImDrawListPtr drawList, MapView view, Func<Vector2, Vector2> toScreen)
@@ -543,7 +584,7 @@ internal static class GlobePanel
 		ImGui.SameLine();
 		ImGui.TextUnformatted(string.Create(
 			Culture,
-			$"1e{ResidualColorScale.MinimumLog10Kilometers:0} km … 1e{ResidualColorScale.MaximumLog10Kilometers:0} km, log scale; grey = no state"));
+			$"1e{ResidualColorScale.MinimumLog10Kilometers:0} km … 1e{ResidualColorScale.MaximumLog10Kilometers:0} km, log scale; grey = no state; blue band = one revolution of the orbit"));
 	}
 
 	private static List<List<TrackPoint>> TrackFor(GlobeObject item)
