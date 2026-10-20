@@ -26,9 +26,12 @@ using ktsu.Osculator.Core.Residuals;
 /// </para>
 /// <para>
 /// The orbital fields are editable, and the sensitivities follow the edit, so a reader can see that
-/// mean motion never leads however it is nudged. Two fields are deliberately not measured: the epoch,
-/// which <see cref="DataTerm"/> does not perturb yet, and the second derivative of mean motion,
-/// which SGP4 never reads and so contributes exactly nothing.
+/// mean motion never leads however it is nudged. Every step is the one the set's own format writes
+/// the field to (<see cref="ElementFieldQuantization.For(ElementSet)"/>), which is the step
+/// <see cref="DataTerm"/> perturbs by, so an OMM set shows the JSON's finer eccentricity and B*
+/// beside the shift those finer steps produce. The epoch is measured like any other field. Only
+/// the second derivative of mean motion is not, because SGP4 never reads it and so it contributes
+/// exactly nothing.
 /// </para>
 /// <para>
 /// The panel follows <see cref="CatalogueSelection"/>. Until something is selected there it shows an
@@ -43,7 +46,23 @@ internal sealed class ElementInspectorPanel : Panel
 	private const double MinutesPerDay = 1440.0;
 	private const double MetersPerKilometer = 1000.0;
 
+	private const double SecondsPerDay = 86400.0;
+
 	private static readonly CultureInfo Culture = CultureInfo.InvariantCulture;
+
+	private static readonly FieldRow[] FieldRows =
+	[
+		new("MEAN_MOTION", "rev/day", nameof(ElementSet.MeanMotion), static e => e.MeanMotion, static (e, v) => e with { MeanMotion = v }),
+		new("ECCENTRICITY", string.Empty, nameof(ElementSet.Eccentricity), static e => e.Eccentricity, static (e, v) => e with { Eccentricity = v }),
+		new("INCLINATION", "deg", nameof(ElementSet.Inclination), static e => e.Inclination, static (e, v) => e with { Inclination = v }),
+		new("RA_OF_ASC_NODE", "deg", nameof(ElementSet.RightAscensionOfAscendingNode), static e => e.RightAscensionOfAscendingNode,
+			static (e, v) => e with { RightAscensionOfAscendingNode = v }),
+		new("ARG_OF_PERICENTER", "deg", nameof(ElementSet.ArgumentOfPericenter), static e => e.ArgumentOfPericenter,
+			static (e, v) => e with { ArgumentOfPericenter = v }),
+		new("MEAN_ANOMALY", "deg", nameof(ElementSet.MeanAnomaly), static e => e.MeanAnomaly, static (e, v) => e with { MeanAnomaly = v }),
+		new("BSTAR", "1/Earth radii", nameof(ElementSet.BStar), static e => e.BStar, static (e, v) => e with { BStar = v }),
+		new("MEAN_MOTION_DOT", "rev/day^2", nameof(ElementSet.MeanMotionDot), static e => e.MeanMotionDot, static (e, v) => e with { MeanMotionDot = v }),
+	];
 
 	private static readonly ImGuiWidgets.PropertyGridOptions GridOptions = new()
 	{
@@ -97,7 +116,7 @@ internal sealed class ElementInspectorPanel : Panel
 			}
 		}
 
-		ImGui.TextUnformatted($"{current.ObjectName}  ({current.NoradCatalogId.ToString(Culture)})");
+		ImGui.TextUnformatted($"{current.ObjectName}  ({current.NoradCatalogId.ToString(Culture)}), read from {FormatName(current.Format)}");
 
 		if (ImGui.SliderFloat("Horizon (days)", ref horizonDays, 0.0f, 30.0f, "%.2f"))
 		{
@@ -125,22 +144,11 @@ internal sealed class ElementInspectorPanel : Panel
 		DrawEpoch(grid);
 
 		bool changed = false;
-		changed |= DrawField(grid, "MEAN_MOTION", "rev/day", current.MeanMotion, ElementFieldQuantization.MeanMotion, nameof(ElementSet.MeanMotion),
-			static (e, v) => e with { MeanMotion = v });
-		changed |= DrawField(grid, "ECCENTRICITY", string.Empty, current.Eccentricity, ElementFieldQuantization.Eccentricity, nameof(ElementSet.Eccentricity),
-			static (e, v) => e with { Eccentricity = v });
-		changed |= DrawField(grid, "INCLINATION", "deg", current.Inclination, ElementFieldQuantization.Inclination, nameof(ElementSet.Inclination),
-			static (e, v) => e with { Inclination = v });
-		changed |= DrawField(grid, "RA_OF_ASC_NODE", "deg", current.RightAscensionOfAscendingNode, ElementFieldQuantization.RightAscensionOfAscendingNode,
-			nameof(ElementSet.RightAscensionOfAscendingNode), static (e, v) => e with { RightAscensionOfAscendingNode = v });
-		changed |= DrawField(grid, "ARG_OF_PERICENTER", "deg", current.ArgumentOfPericenter, ElementFieldQuantization.ArgumentOfPericenter,
-			nameof(ElementSet.ArgumentOfPericenter), static (e, v) => e with { ArgumentOfPericenter = v });
-		changed |= DrawField(grid, "MEAN_ANOMALY", "deg", current.MeanAnomaly, ElementFieldQuantization.MeanAnomaly, nameof(ElementSet.MeanAnomaly),
-			static (e, v) => e with { MeanAnomaly = v });
-		changed |= DrawField(grid, "BSTAR", "1/Earth radii", current.BStar, ElementFieldQuantization.StepForExponentialField(current.BStar), "BStar",
-			static (e, v) => e with { BStar = v });
-		changed |= DrawField(grid, "MEAN_MOTION_DOT", "rev/day^2", current.MeanMotionDot, ElementFieldQuantization.MeanMotionDot, nameof(ElementSet.MeanMotionDot),
-			static (e, v) => e with { MeanMotionDot = v });
+		foreach (FieldRow row in FieldRows)
+		{
+			changed |= DrawField(grid, row);
+		}
+
 		DrawMeanMotionDdot(grid);
 
 		if (changed)
@@ -149,15 +157,31 @@ internal sealed class ElementInspectorPanel : Panel
 		}
 	}
 
+	/// <summary>Gets the fields whose rows show a measured "dr per step", in the order they are drawn.</summary>
+	/// <remarks>So a test can hold the panel against <see cref="DataTerm.PerturbedFields"/>.</remarks>
+	internal static IReadOnlyList<string> MeasuredFields { get; } = [nameof(ElementSet.Epoch), .. Array.ConvertAll(FieldRows, static r => r.Field)];
+
+	/// <summary>One editable field of the element set and the <see cref="DataTerm"/> field it is measured as.</summary>
+	/// <param name="OmmName">The OMM keyword the row is labelled with.</param>
+	/// <param name="Unit">The unit shown beside the value.</param>
+	/// <param name="Field">The field as <see cref="DataTerm.Contribution.Field"/> names it.</param>
+	/// <param name="Get">Reads the field.</param>
+	/// <param name="Set">Writes the field.</param>
+	private readonly record struct FieldRow(string OmmName, string Unit, string Field, Func<ElementSet, double> Get, Func<ElementSet, double, ElementSet> Set);
+
 	/// <summary>
 	/// The data term for the element set on screen, keyed by <see cref="DataTerm.Contribution.Field"/>.
 	/// </summary>
 	/// <param name="PerField">Each measured field's half-step position shift, in kilometres.</param>
 	/// <param name="CombinedMeters">The combined term, in metres.</param>
 	/// <param name="Error">Why there is no measurement, or <see langword="null"/> when there is one.</param>
-	private readonly record struct Measurement(IReadOnlyDictionary<string, double> PerField, double CombinedMeters, string? Error);
+	internal readonly record struct Measurement(IReadOnlyDictionary<string, double> PerField, double CombinedMeters, string? Error);
 
-	private static Measurement Measure(ElementSet elements, float days)
+	/// <summary>Measures the data term for an element set at a horizon, as the panel shows it.</summary>
+	/// <param name="elements">The element set.</param>
+	/// <param name="days">The horizon, in days.</param>
+	/// <returns>The measurement, or one carrying the reason there is none.</returns>
+	internal static Measurement Measure(ElementSet elements, float days)
 	{
 		try
 		{
@@ -193,8 +217,9 @@ internal sealed class ElementInspectorPanel : Panel
 		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section("EPOCH");
 
 		ReadOnlyRow(grid, "Value##EPOCH", current.Epoch.ToString("yyyy-MM-ddTHH:mm:ss.ffffff", Culture));
-		ReadOnlyRow(grid, "Step##EPOCH", $"{Format(ElementFieldQuantization.EpochDays, "G3")} day ({FormatSeconds(ElementFieldQuantization.EpochDays * 86400.0)})");
-		ReadOnlyRow(grid, "dr per step##EPOCH", "not measured yet: the data term does not perturb the epoch");
+		double step = StepOf(current, nameof(ElementSet.Epoch));
+		ReadOnlyRow(grid, "Step##EPOCH", $"{Format(step, "G3")} day ({FormatSeconds(step * SecondsPerDay)})");
+		ReadOnlyRow(grid, "dr per step##EPOCH", Sensitivity(measurement, nameof(ElementSet.Epoch)));
 	}
 
 	private void DrawMeanMotionDdot(ImGuiWidgets.PropertyGrid grid)
@@ -202,36 +227,61 @@ internal sealed class ElementInspectorPanel : Panel
 		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section("MEAN_MOTION_DDOT");
 
 		ReadOnlyRow(grid, "Value##MEAN_MOTION_DDOT", $"{Format(current.MeanMotionDdot, "G6")} rev/day^3");
-		ReadOnlyRow(grid, "Step##MEAN_MOTION_DDOT", Format(ElementFieldQuantization.StepForExponentialField(current.MeanMotionDdot), "G3"));
+		ReadOnlyRow(grid, "Step##MEAN_MOTION_DDOT", Format(StepOf(current, nameof(ElementSet.MeanMotionDdot)), "G3"));
 		ReadOnlyRow(grid, "dr per step##MEAN_MOTION_DDOT", "0 m: SGP4 never reads this field");
 	}
 
-	private bool DrawField(
-		ImGuiWidgets.PropertyGrid grid,
-		string ommName,
-		string unit,
-		double value,
-		double step,
-		string dataTermField,
-		Func<ElementSet, double, ElementSet> apply)
+	private bool DrawField(ImGuiWidgets.PropertyGrid grid, FieldRow row)
 	{
-		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section(ommName);
+		using ImGuiWidgets.PropertyGrid.SectionScope section = grid.Section(row.OmmName);
 
-		double edited = value;
-		bool changed = grid.Value($"Value{(unit.Length > 0 ? $" ({unit})" : string.Empty)}##{ommName}", ref edited);
+		double edited = row.Get(current);
+		bool changed = grid.Value($"Value{(row.Unit.Length > 0 ? $" ({row.Unit})" : string.Empty)}##{row.OmmName}", ref edited);
 
 		if (changed)
 		{
-			current = apply(current, edited);
+			current = row.Set(current, edited);
 		}
 
-		ReadOnlyRow(grid, $"Step##{ommName}", Format(step, "G3"));
-		ReadOnlyRow(grid, $"dr per step##{ommName}", Sensitivity(dataTermField));
+		ReadOnlyRow(grid, $"Step##{row.OmmName}", Format(StepOf(current, row.Field), "G3"));
+		ReadOnlyRow(grid, $"dr per step##{row.OmmName}", Sensitivity(measurement, row.Field));
 
 		return changed;
 	}
 
-	private string Sensitivity(string dataTermField)
+	/// <summary>
+	/// The step a field of an element set is written to, in the format that set was read from.
+	/// </summary>
+	/// <param name="elements">The element set.</param>
+	/// <param name="field">The field, named as <see cref="DataTerm.Contribution.Field"/> names it.</param>
+	/// <returns>The step, which for a measured field is the one <see cref="DataTerm"/> perturbs by.</returns>
+	internal static double StepOf(ElementSet elements, string field)
+	{
+		ElementFieldSteps steps = ElementFieldQuantization.For(elements);
+
+		return field switch
+		{
+			nameof(ElementSet.Epoch) => steps.EpochDays,
+			nameof(ElementSet.MeanMotion) => steps.MeanMotion,
+			nameof(ElementSet.Eccentricity) => steps.Eccentricity,
+			nameof(ElementSet.Inclination) => steps.Inclination,
+			nameof(ElementSet.RightAscensionOfAscendingNode) => steps.RightAscensionOfAscendingNode,
+			nameof(ElementSet.ArgumentOfPericenter) => steps.ArgumentOfPericenter,
+			nameof(ElementSet.MeanAnomaly) => steps.MeanAnomaly,
+			nameof(ElementSet.MeanMotionDot) => steps.MeanMotionDot,
+			nameof(ElementSet.BStar) => steps.StepForExponentialField(elements.BStar),
+			nameof(ElementSet.MeanMotionDdot) => steps.StepForExponentialField(elements.MeanMotionDdot),
+			_ => throw new ArgumentOutOfRangeException(nameof(field), field, "Not an element set field."),
+		};
+	}
+
+	/// <summary>
+	/// The "dr per step" text of one field: the measured half-step shift doubled to a whole step.
+	/// </summary>
+	/// <param name="measurement">The measurement on screen, or <see langword="null"/> before there is one.</param>
+	/// <param name="field">The field, named as <see cref="DataTerm.Contribution.Field"/> names it.</param>
+	/// <returns>The text, or a dash when nothing is measured for the field.</returns>
+	internal static string Sensitivity(Measurement? measurement, string field)
 	{
 		if (measurement is not { Error: null } m)
 		{
@@ -239,10 +289,17 @@ internal sealed class ElementInspectorPanel : Panel
 		}
 
 		// Half a step was measured; a whole step is twice that to first order.
-		return m.PerField.TryGetValue(dataTermField, out double halfStepKilometers)
+		return m.PerField.TryGetValue(field, out double halfStepKilometers)
 			? $"{FormatMeters(2.0 * halfStepKilometers * MetersPerKilometer)} per step"
 			: "-";
 	}
+
+	private static string FormatName(ElementSetFormat format) => format switch
+	{
+		ElementSetFormat.Omm => "OMM JSON",
+		ElementSetFormat.Tle => "two-line text",
+		_ => format.ToString(),
+	};
 
 	private static void ReadOnlyRow(ImGuiWidgets.PropertyGrid grid, string label, string text)
 	{
