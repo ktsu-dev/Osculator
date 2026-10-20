@@ -281,9 +281,9 @@ public sealed class SlrResidualGateTests
 			web,
 			new Data.CelesTrak.ResponseCache(System.IO.Path.Join(cacheRoot, "cddis"), TimeSpan.FromHours(12), TimeProvider.System),
 			new Data.Cddis.OsCredentialStore());
-		Data.Iers.EarthOrientationTable bulletin = await new Data.Iers.IersClient(
+		Data.Iers.EarthOrientationTable bulletin = (await new Data.Iers.IersClient(
 			web,
-			new Data.CelesTrak.ResponseCache(System.IO.Path.Join(cacheRoot, "iers"), TimeSpan.FromDays(1), TimeProvider.System)).GetTableAsync().ConfigureAwait(false);
+			new Data.CelesTrak.ResponseCache(System.IO.Path.Join(cacheRoot, "iers"), TimeSpan.FromDays(1), TimeProvider.System)).GetTableAsync().ConfigureAwait(false)).Value;
 
 		SlrGateResult result = await LageosGate.RunAsync(spaceTrack, cddis, bulletin, day).ConfigureAwait(false);
 
