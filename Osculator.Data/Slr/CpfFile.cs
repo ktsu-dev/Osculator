@@ -5,6 +5,7 @@ namespace ktsu.Osculator.Data.Slr;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ktsu.Osculator.Core.Time;
 
 /// <summary>
@@ -72,9 +73,8 @@ public sealed class CpfFile
 		List<CpfRecord> records = [];
 		JulianDate? first = null;
 
-		foreach (string raw in text.Split('\n'))
+		foreach (string line in text.Split('\n').Select(static raw => raw.TrimEnd('\r')))
 		{
-			string line = raw.TrimEnd('\r');
 			string[] fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
 			if (fields.Length == 0)
