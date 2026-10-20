@@ -46,7 +46,7 @@ internal static class OrbitRibbon
 	{
 		Ensure.NotNull(elements);
 
-		if (!(elements.MeanMotion > 0.0))
+		if (double.IsNaN(elements.MeanMotion) || elements.MeanMotion <= 0.0)
 		{
 			throw new ArgumentOutOfRangeException(nameof(elements), elements.MeanMotion, "The mean motion must be positive.");
 		}
