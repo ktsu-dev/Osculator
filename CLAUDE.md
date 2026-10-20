@@ -70,15 +70,15 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
-"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
-path to the network for both clients: overlapping callers for a key share one request, a failed
-request is throttled (the whole window when a stale copy exists, `FailureBackoff` when nothing
-does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
-(1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
-memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
-`IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
-ends earlier than the copy it would replace, because a truncated CSV still parses. Each of those
-was mutation-checked the same way: reverting any one fails at least one test.
+"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one path
+to the network for the CelesTrak, IERS, Space-Track and Horizons clients: overlapping callers for a
+key share one request, a failed request is throttled (the whole window when a stale copy exists,
+`FailureBackoff` when nothing does), a stamp from the future is stale, the window cannot be set
+below `MinimumAllowedAge` (1 h), writes are temp-file-and-rename, and a cache that cannot be written
+keeps the response in memory rather than failing the call. Every result is a `Fetched<T>` carrying
+`FetchedAt` and `IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a
+download that ends earlier than the copy it would replace, because a truncated CSV still parses.
+Each of those was mutation-checked the same way: reverting any one fails at least one test.
 
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
 every usable case in the verification set, perturbs each element field by half the step its
@@ -734,6 +734,16 @@ Every client caches to disk and works offline from cache. This is enforced, not 
   from the OS credential store by `OsCredentialStore` (Credential Manager, Keychain, Secret Service),
   whose remarks give the one command per platform that stores it. The client's tests run against a
   fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
+  Every query goes through `ResponseCache.FetchAsync`, so a limiter refusal, a rejected login or an
+  outage serves the cached copy flagged `IsStale` and is not retried inside the back-off. Its
+  `{"error": ...}` object is classified like CelesTrak's `Invalid query:` — an answer, raised as
+  `SpaceTrackQueryRejectedException`, never cached and never answered from an older copy — except
+  the rate-limit error, which says nothing about the query and is throttled as an outage.
+  Conjunction data messages come from `cdm_public` in one query for every object, cached on the
+  same hourly window (`GetConjunctionsAsync`), with the miss distance converted from metres to km.
+- **Horizons** has no published quota. One request is in flight at a time process-wide, and every
+  table goes through `ResponseCache.FetchAsync` with the same stale-flag and back-off rules; a
+  refusal (`error` member, or a report with no table) is an answer and is never throttled.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
   in this repository. `Osculator.Data/Cddis/` reads the bearer token from the store under
   `osculator-earthdata` (Credential Manager, Keychain or the Secret Service; `OsCredentialStore`
