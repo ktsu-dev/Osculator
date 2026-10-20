@@ -501,7 +501,8 @@ every dialog twice), and frame rates throttled when unfocused (5), idle for 30 s
   `registry.Register<YourPanel>();` to `Shell/Panels.cs`. The title is the docked window's identity,
   so a duplicate is refused at registration.
   `RegisteredPanelsTests` fails for any `Panel` subclass that `Panels.Register` leaves out: four
-  panels once sat undrawn for weeks, the catalogue among them, so nothing could be selected (#120).
+  panels were once built and never registered, the catalogue among them, so nothing could be
+  selected (#120).
   The four that predate the shell (catalogue, globe, residual plots, time inspector) are wrapped by
   `Shell/*Window.cs` rather than edited, as `StorageComparisonWindow` wraps its panel.
 - **Tests never fetch the catalogue.** Drawing the shell draws the catalogue, which loads from
