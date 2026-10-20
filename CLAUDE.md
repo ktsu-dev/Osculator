@@ -277,6 +277,22 @@ Three things to take from it, all asserted:
    the set was read from (`ElementFieldQuantization.For`), so the committed OMM snapshots draw from
    the JSON's finer eccentricity and B* rather than the two-line text's.
 
+**The decomposition also takes a precise orbit or a Horizons vector as truth** (#124).
+`TruthState<T>` is the state taken as truth, already rotated into TEME: from a later element set,
+from the ITRF through `Sp3Truth<T>` (an SP3 file's positions and velocities, each interpolated with
+the tenth-order Lagrange polynomial), from the GCRF (a Horizons table, TT or TDB in, UTC worked out
+through the leap-second table), or a TEME state as given. Δ_model stays in the truth's RIC frame,
+which the rotation does not change. An Earth-fixed truth carries its `EarthOrientation`, and the
+IERS sigmas' share (`EarthOrientationTerm`) is reported in `DecompositionResult.Orientation` and
+folded into `DataKilometers` in quadrature, so it is never counted as model error (spec §11).
+`DecompositionTruthTests` runs it on the committed LAGEOS-1 excerpt in 30 digits: Δ_model 0.10 km
+an hour out, Δ_data 0.011 km (of which the orientation is 2.7 mm), Δ_arith(`double`) 1.5e-11 km,
+and the reference against itself zero. **The LAGEOS element set there is fitted, not published**:
+no NORAD set for that hour could be obtained, so SGP4 was fitted to the excerpt's first twenty
+minutes and written out as a TLE. Δ_model against it is a fit's error, not an operator's. Truth
+built from SGP4's own output, directly, through the ITRF and back, or through a Horizons-layout
+table, reads Δ_model ≈ 0.
+
 **Residual statistics are accumulated in the storage type, with no compensation.**
 `ResidualStatistics<T>` (RMS overall and per RIC axis, nearest-rank percentiles) and
 `ErrorGrowthFit<T>` (km/day, intercept fitted) are one generic each, so spec §1 demo 5 is the same
