@@ -72,6 +72,12 @@ public sealed class RegisteredPanelsTests : IDisposable
 		string snapshot = Directory.EnumerateFiles(Path.Join(AppContext.BaseDirectory, "Data", "iss-snapshots", "25544"), "*.json").Order(StringComparer.Ordinal).Last();
 		ResponseCache cache = new(Path.Join(root, "Osculator", "celestrak"), TimeSpan.FromHours(2), TimeProvider.System);
 		cache.Write($"GROUP={CataloguePanel.Group}&FORMAT=json", "[" + File.ReadAllText(snapshot).Trim() + "]");
+
+		// The catalogue merges several groups, and one left uncached would be fetched from CelesTrak.
+		foreach (string group in CatalogueLoader.CelesTrakGroups.Where(group => group != CataloguePanel.Group))
+		{
+			cache.Write($"GROUP={group}&FORMAT=json", "[]");
+		}
 		seeded = true;
 	}
 
