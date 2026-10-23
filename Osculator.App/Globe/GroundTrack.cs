@@ -148,9 +148,20 @@ internal static class GroundTrack
 	/// between samples. On an orthographic globe a track passing behind the Earth must vanish
 	/// rather than be drawn through it.
 	/// </remarks>
-	internal static List<List<Vector2>> Project(MapView view, IEnumerable<List<TrackPoint>> runs)
+	internal static List<List<Vector2>> Project(MapView view, IEnumerable<List<TrackPoint>> runs) =>
+		Project(runs, point => view.TryProject(point.LatitudeDegrees, point.LongitudeDegrees, out Vector2 at) ? at : null);
+
+	/// <summary>
+	/// Turns runs of points into polylines through a projection of the caller's choosing, broken
+	/// wherever a point is hidden or the line jumps more than half the image across.
+	/// </summary>
+	/// <param name="runs">The runs.</param>
+	/// <param name="project">Where a point lands in the unit square, or <see langword="null"/> when it is hidden.</param>
+	/// <returns>Polylines in the unit square.</returns>
+	internal static List<List<Vector2>> Project(IEnumerable<List<TrackPoint>> runs, Func<TrackPoint, Vector2?> project)
 	{
 		Ensure.NotNull(runs);
+		Ensure.NotNull(project);
 
 		List<List<Vector2>> lines = [];
 
@@ -160,15 +171,15 @@ internal static class GroundTrack
 
 			foreach (TrackPoint point in run)
 			{
-				bool visible = view.TryProject(point.LatitudeDegrees, point.LongitudeDegrees, out Vector2 at);
-				bool wrapped = line.Count > 0 && MathF.Abs(at.X - line[^1].X) > 0.5f;
+				Vector2? projected = project(point);
+				bool wrapped = projected is Vector2 next && line.Count > 0 && MathF.Abs(next.X - line[^1].X) > 0.5f;
 
-				if (!visible || wrapped)
+				if (projected is null || wrapped)
 				{
 					Flush(lines, ref line);
 				}
 
-				if (visible)
+				if (projected is Vector2 at)
 				{
 					line.Add(at);
 				}

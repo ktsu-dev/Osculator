@@ -52,7 +52,7 @@ public sealed class HorizonsClientTests
 		CountingHandler handler = Transport(HorizonsSample.MoonJson);
 		HorizonsClient client = ClientOver(handler, new FakeClock(DateTimeOffset.UnixEpoch), TimeSpan.FromDays(1));
 
-		HorizonsEphemeris moon = await client.GetVectorsAsync(HorizonsRequest.Moon(Start, Stop, TimeSpan.FromHours(1))).ConfigureAwait(false);
+		HorizonsEphemeris moon = (await client.GetVectorsAsync(HorizonsRequest.Moon(Start, Stop, TimeSpan.FromHours(1))).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(4, moon.Vectors);
 
@@ -166,14 +166,14 @@ public sealed class HorizonsClientTests
 		clock.Advance(TimeSpan.FromDays(2));
 		handler.Body = "<html>Sign in to continue</html>";
 
-		HorizonsEphemeris served = await client.GetVectorsAsync(request).ConfigureAwait(false);
+		HorizonsEphemeris served = (await client.GetVectorsAsync(request).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(4, served.Vectors);
 
 		handler.Body = HorizonsSample.Wrap(HorizonsSample.Report(endMarker: string.Empty));
 		clock.Advance(TimeSpan.FromDays(2));
 
-		served = await client.GetVectorsAsync(request).ConfigureAwait(false);
+		served = (await client.GetVectorsAsync(request).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(4, served.Vectors, "A truncated table must not have replaced the good copy.");
 	}
@@ -191,7 +191,7 @@ public sealed class HorizonsClientTests
 		handler.Status = HttpStatusCode.ServiceUnavailable;
 		handler.Body = "<html>503</html>";
 
-		HorizonsEphemeris served = await client.GetVectorsAsync(request).ConfigureAwait(false);
+		HorizonsEphemeris served = (await client.GetVectorsAsync(request).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(4, served.Vectors);
 	}
@@ -208,7 +208,7 @@ public sealed class HorizonsClientTests
 		clock.Advance(TimeSpan.FromDays(365));
 		handler.FailWith = new HttpRequestException("no route to host");
 
-		HorizonsEphemeris offline = await client.GetVectorsAsync(request).ConfigureAwait(false);
+		HorizonsEphemeris offline = (await client.GetVectorsAsync(request).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(4, offline.Vectors);
 	}
@@ -252,7 +252,7 @@ public sealed class HorizonsClientTests
 		HorizonsClient client = ClientOver(handler, new FakeClock(DateTimeOffset.UnixEpoch), TimeSpan.FromDays(1));
 		HorizonsRequest request = HorizonsRequest.Moon(Start, Stop, TimeSpan.FromHours(1));
 
-		Task<HorizonsEphemeris>[] calls =
+		Task<Fetched<HorizonsEphemeris>>[] calls =
 		[
 			client.GetVectorsAsync(request),
 			client.GetVectorsAsync(request),

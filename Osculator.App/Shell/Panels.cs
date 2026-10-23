@@ -26,5 +26,6 @@ internal static class Panels
 		registry.Register<ConjunctionScreeningPanel>();
 		registry.Register<KeplerDemoPanel>();
 		registry.Register<CowellRoundOffPanel>();
+		registry.Register<FloatQuantizationPanel>();
 	}
 }
