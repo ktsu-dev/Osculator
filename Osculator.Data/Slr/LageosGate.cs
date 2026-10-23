@@ -93,11 +93,11 @@ public static class LageosGate
 			SlrTruth.FromSp3(orbit.Orbit, orbit.Orbit.Satellites[0], DoubleStorageMath.Instance),
 			day);
 
-		IReadOnlyList<ElementSet> history = await spaceTrack.GetHistoryAsync(
+		IReadOnlyList<ElementSet> history = (await spaceTrack.GetHistoryAsync(
 			NoradCatalogId,
 			day.AddDays(-(int)Lookback.TotalDays),
 			day.AddDays(1),
-			cancellationToken).ConfigureAwait(false);
+			cancellationToken).ConfigureAwait(false)).Value;
 
 		ElementSet elements = LatestBefore(history, truth[0].Instant)
 			?? throw new InvalidOperationException(
