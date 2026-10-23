@@ -109,7 +109,12 @@ internal sealed class CatalogueLoader(CelesTrakClient celesTrak, SatcatClient sa
 		{
 			try
 			{
-				elements = await spaceTrack.GetCatalogueAsync(cancellationToken).ConfigureAwait(false);
+				Fetched<IReadOnlyList<ElementSet>> fetched = await spaceTrack.GetCatalogueAsync(cancellationToken).ConfigureAwait(false);
+				elements = fetched.Value;
+				if (fetched.IsStale)
+				{
+					notes.Add("Space-Track could not be reached; this is the last catalogue the cache holds.");
+				}
 			}
 			catch (SpaceTrackException failure)
 			{
