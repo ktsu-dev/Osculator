@@ -4,9 +4,11 @@ namespace ktsu.Osculator.App.Panels;
 
 using System.Globalization;
 using ktsu.Osculator.Core.Elements;
+using ktsu.Osculator.Data.CelesTrak;
 
 /// <summary>
-/// One row of the catalogue: an element set, the orbit it describes, and the text search ranks it by.
+/// One row of the catalogue: an element set, the orbit it describes, what kind of object it is, and
+/// the text search ranks it by.
 /// </summary>
 /// <remarks>
 /// Everything a row displays or is filtered on is computed once, when the catalogue loads, so that
@@ -18,9 +20,14 @@ internal sealed class CatalogueEntry
 	/// Initializes a new instance of the <see cref="CatalogueEntry"/> class.
 	/// </summary>
 	/// <param name="elements">The element set.</param>
-	internal CatalogueEntry(ElementSet elements)
+	/// <param name="objectType">
+	/// What the satellite catalogue says the object is. An object it has no row for, or a catalogue
+	/// that could not be loaded, is <see cref="SatcatObjectType.Unknown"/>.
+	/// </param>
+	internal CatalogueEntry(ElementSet elements, SatcatObjectType objectType = SatcatObjectType.Unknown)
 	{
 		Elements = elements;
+		ObjectType = objectType;
 		Geometry = OrbitGeometry.Of(elements);
 		NoradText = elements.NoradCatalogId.ToString(CultureInfo.InvariantCulture);
 
@@ -31,6 +38,9 @@ internal sealed class CatalogueEntry
 
 	/// <summary>Gets the element set.</summary>
 	internal ElementSet Elements { get; }
+
+	/// <summary>Gets what the satellite catalogue says the object is.</summary>
+	internal SatcatObjectType ObjectType { get; }
 
 	/// <summary>Gets the orbit the element set describes.</summary>
 	internal OrbitGeometry Geometry { get; }

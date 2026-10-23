@@ -68,7 +68,7 @@ public sealed class SpaceTrackClientTests
 		using FakeSpaceTrack server = new() { QueryBody = History() };
 		SpaceTrackClient client = ClientOver(server, new ManualClock(Start));
 
-		IReadOnlyList<ElementSet> history = await client.GetHistoryAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> history = (await client.GetHistoryAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(3, history);
 		Assert.HasCount(2, server.Requests);
@@ -178,7 +178,7 @@ public sealed class SpaceTrackClientTests
 		await client.GetObjectAsync(2).ConfigureAwait(false);
 		await Assert.ThrowsExactlyAsync<SpaceTrackRateLimitException>(() => client.GetObjectAsync(3)).ConfigureAwait(false);
 
-		IReadOnlyList<ElementSet> stale = await client.GetHistoryAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> stale = (await client.GetHistoryAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(3, stale, "Refused by the limiter, answered from the cache.");
 	}
@@ -261,7 +261,7 @@ public sealed class SpaceTrackClientTests
 
 		// How Space-Track reports a broken limit or a bad query: a 200 and an object.
 		server.QueryBody = """{"error":"You've violated your query rate limit."}""";
-		IReadOnlyList<ElementSet> answer = await client.GetHistoryAsync(25544).ConfigureAwait(false);
+		IReadOnlyList<ElementSet> answer = (await client.GetHistoryAsync(25544).ConfigureAwait(false)).Value;
 
 		Assert.HasCount(3, answer, "The good copy survives.");
 		StringAssert.Contains(client.Cache.ReadAtAnyAge("spacetrack:" + SpaceTrackClient.HistoryQuery(25544, null, null)), "25544");

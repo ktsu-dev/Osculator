@@ -60,7 +60,24 @@ internal readonly record struct MapView(MapProjection Projection, double CentreL
 	/// <param name="longitudeDegrees">Longitude, in degrees east.</param>
 	/// <param name="normalized">Where the point lands, in the unit square.</param>
 	/// <returns><see langword="false"/> when the point is on the far side of an orthographic globe.</returns>
-	internal bool TryProject(double latitudeDegrees, double longitudeDegrees, out Vector2 normalized)
+	internal bool TryProject(double latitudeDegrees, double longitudeDegrees, out Vector2 normalized) =>
+		TryProject(latitudeDegrees, longitudeDegrees, 1.0, out normalized);
+
+	/// <summary>
+	/// Projects a point above the surface onto the image.
+	/// </summary>
+	/// <param name="latitudeDegrees">Latitude, in degrees.</param>
+	/// <param name="longitudeDegrees">Longitude, in degrees east.</param>
+	/// <param name="radiusRatio">
+	/// How far the point is from the Earth's centre, in Earth radii; 1 is the surface. The
+	/// equirectangular projection has no height and ignores it.
+	/// </param>
+	/// <param name="normalized">Where the point lands, in the unit square, which a point above the limb leaves.</param>
+	/// <returns>
+	/// <see langword="false"/> when the Earth is in front of the point on an orthographic globe: it is
+	/// beyond the plane through the Earth's centre facing the viewer, and inside the disc.
+	/// </returns>
+	internal bool TryProject(double latitudeDegrees, double longitudeDegrees, double radiusRatio, out Vector2 normalized)
 	{
 		double deltaLongitude = WrapDegrees(longitudeDegrees - CentreLongitudeDegrees);
 
@@ -80,10 +97,13 @@ internal readonly record struct MapView(MapProjection Projection, double CentreL
 		double x = Math.Cos(latitude) * Math.Sin(lambda);
 		double y = (Math.Cos(centreLatitude) * Math.Sin(latitude)) - (Math.Sin(centreLatitude) * Math.Cos(latitude) * Math.Cos(lambda));
 
+		x *= radiusRatio;
+		y *= radiusRatio;
+
 		normalized = new Vector2(
 			(float)(0.5 + (x * 0.5 * DiscFill)),
 			(float)(0.5 - (y * 0.5 * DiscFill)));
-		return cosC >= 0.0;
+		return cosC >= 0.0 || ((x * x) + (y * y)) > 1.0;
 	}
 
 	/// <summary>

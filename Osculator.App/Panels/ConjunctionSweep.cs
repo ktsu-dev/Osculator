@@ -3,13 +3,11 @@
 namespace ktsu.Osculator.App.Panels;
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
-using System.Threading.Tasks;
 using ktsu.Osculator.Core.Conjunction;
 using ktsu.Osculator.Core.Elements;
 using ktsu.Osculator.Core.Propagation;
@@ -30,11 +28,11 @@ using ktsu.Osculator.Numerics.Precise;
 /// <see cref="CompareAcrossStorageTypes"/> takes in each of them.
 /// </para>
 /// <para>
-/// Pairs are screened one at a time through <see cref="IConjunctionScreener.Screen"/>, so the shell
-/// pre-filter and the failure reporting are the core's own, and the loop between pairs is where a
-/// cancellation is noticed and progress is counted. The shell test is repeated here first, against
-/// shells computed once per object, so a rejected pair costs a subtraction rather than two
-/// initializations.
+/// Each screen is one call into the core — <see cref="ConjunctionScreener{T}.ScreenAgainst"/> for
+/// the selected object, <see cref="ConjunctionScreener{T}.Screen(IReadOnlyList{ElementSet}, ConjunctionScreenOptions, IProgress{ConjunctionScreenProgress}?, CancellationToken)"/>
+/// for a group — so the shell pre-filter, the failure reporting, the parallelism and the caching of
+/// each object's propagated grid are all the core's own. Calling it once per pair, as this class
+/// used to, propagated every object again for every partner (#126).
 /// </para>
 /// </remarks>
 internal static class ConjunctionSweep
@@ -61,7 +59,8 @@ internal static class ConjunctionSweep
 	/// </remarks>
 	private const double ComparisonThresholdKm = 1.0e6;
 
-	private static readonly ConjunctionScreener<double> Screener = ConjunctionScreener.Create(DoubleStorageMath.Instance);
+	/// <summary>The screen every sweep runs through; internal so a test can count its propagations.</summary>
+	internal static readonly ConjunctionScreener<double> Screener = ConjunctionScreener.Create(DoubleStorageMath.Instance);
 
 	/// <summary>
 	/// Screens one object against every other in a catalogue.
@@ -83,9 +82,13 @@ internal static class ConjunctionSweep
 		Ensure.NotNull(catalogue);
 
 		ElementSet[] others = [.. catalogue.Where(e => e.NoradCatalogId != primary.NoradCatalogId)];
-		(ElementSet, ElementSet)[] pairs = [.. others.Select(other => (primary, other))];
 
-		return Sweep(pairs, [primary, .. others], options, progress, cancellationToken);
+		return Sweep(
+			[primary, .. others],
+			options,
+			progress,
+			screenProgress => Screener.ScreenAgainst(primary, others, options, screenProgress, cancellationToken),
+			cancellationToken);
 	}
 
 	/// <summary>
@@ -110,17 +113,12 @@ internal static class ConjunctionSweep
 			throw new ArgumentOutOfRangeException(nameof(objects), objects.Count, $"All-against-all screening is limited to {MaximumGroupSize} objects.");
 		}
 
-		List<(ElementSet, ElementSet)> pairs = [];
-
-		for (int i = 0; i < objects.Count; i++)
-		{
-			for (int j = i + 1; j < objects.Count; j++)
-			{
-				pairs.Add((objects[i], objects[j]));
-			}
-		}
-
-		return Sweep(pairs, objects, options, progress, cancellationToken);
+		return Sweep(
+			objects,
+			options,
+			progress,
+			screenProgress => Screener.Screen(objects, options, screenProgress, cancellationToken),
+			cancellationToken);
 	}
 
 	/// <summary>
@@ -222,53 +220,18 @@ internal static class ConjunctionSweep
 		new(date.Day, date.DayFraction + (minutes / MinutesPerDay));
 
 	private static ConjunctionSweepResult Sweep(
-		IReadOnlyList<(ElementSet Primary, ElementSet Secondary)> pairs,
 		IReadOnlyList<ElementSet> objects,
 		ConjunctionScreenOptions options,
 		ConjunctionProgress progress,
+		Func<IProgress<ConjunctionScreenProgress>, ConjunctionScreenResult> screen,
 		CancellationToken cancellationToken)
 	{
 		Ensure.NotNull(options);
 		Ensure.NotNull(progress);
 		options.Validate();
+		cancellationToken.ThrowIfCancellationRequested();
 
-		Dictionary<int, OrbitShell> shells = [];
-
-		foreach (ElementSet elements in objects)
-		{
-			shells.TryAdd(elements.NoradCatalogId, OrbitShell.Of(elements));
-		}
-
-		double reach = options.ThresholdKm + options.ShellMarginKm;
-		(ElementSet Primary, ElementSet Secondary)[] survivors =
-			[.. pairs.Where(p => shells[p.Primary.NoradCatalogId].GapTo(shells[p.Secondary.NoradCatalogId]) <= reach)];
-
-		progress.Start(survivors.Length);
-
-		ConcurrentBag<ConjunctionEvent> found = [];
-		ConcurrentDictionary<int, ScreeningFailure> failures = [];
-
-		// Pairs are independent and the screener holds no state between calls, so they spread across
-		// cores; the result is sorted afterwards, so the order they finish in does not show.
-		Parallel.ForEach(
-			survivors,
-			new ParallelOptions { CancellationToken = cancellationToken },
-			pair =>
-			{
-				ConjunctionScreenResult result = Screener.Screen([pair.Primary, pair.Secondary], options);
-
-				foreach (ConjunctionEvent conjunction in result.Conjunctions)
-				{
-					found.Add(conjunction);
-				}
-
-				foreach (ScreeningFailure failure in result.Failures)
-				{
-					failures.TryAdd(failure.CatalogId, failure);
-				}
-
-				progress.Advance();
-			});
+		ConjunctionScreenResult result = screen(progress);
 
 		Dictionary<int, ElementSet> byId = [];
 
@@ -279,14 +242,14 @@ internal static class ConjunctionSweep
 
 		return new ConjunctionSweepResult(
 			options,
-			[.. found
+			[.. result.Conjunctions
 				.OrderBy(c => c.MissDistanceKm)
 				.ThenBy(c => c.PrimaryCatalogId)
 				.ThenBy(c => c.SecondaryCatalogId)
 				.ThenBy(c => c.MinutesFromWindowStart)],
-			pairs.Count,
-			survivors.Length,
-			[.. failures.Values.OrderBy(f => f.CatalogId)],
+			result.PairCount,
+			result.PairsPropagated,
+			result.Failures,
 			byId);
 	}
 }
@@ -380,7 +343,7 @@ internal sealed record PairComparison(ConjunctionEvent Screened, IReadOnlyList<S
 /// <summary>
 /// Counts a screen's progress, written by the workers and read by the panel each frame.
 /// </summary>
-internal sealed class ConjunctionProgress
+internal sealed class ConjunctionProgress : IProgress<ConjunctionScreenProgress>
 {
 	private int total;
 	private int done;
@@ -399,6 +362,27 @@ internal sealed class ConjunctionProgress
 		Volatile.Write(ref total, pairs);
 	}
 
-	/// <summary>Counts one pair as propagated.</summary>
-	internal void Advance() => Interlocked.Increment(ref done);
+	/// <summary>Takes the core screen's count, which its workers report concurrently and so out of order.</summary>
+	/// <param name="value">The pairs scanned so far and the pairs there are to scan.</param>
+	public void Report(ConjunctionScreenProgress value)
+	{
+		Volatile.Write(ref total, (int)value.PairsToScan);
+
+		// Reports from different workers can land out of order, so a later, smaller count must not
+		// move the bar backwards.
+		int scanned = (int)value.PairsScanned;
+		int seen = Volatile.Read(ref done);
+
+		while (scanned > seen)
+		{
+			int previous = Interlocked.CompareExchange(ref done, scanned, seen);
+
+			if (previous == seen)
+			{
+				break;
+			}
+
+			seen = previous;
+		}
+	}
 }
