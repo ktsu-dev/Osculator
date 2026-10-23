@@ -59,14 +59,14 @@ public sealed class CowellRoundOffTests
 	private static readonly int[] CheckpointDays = [1, 3, 10, 30];
 
 	/// <summary>The measurement, computed once for the class; the reference run is the cost.</summary>
-	private static readonly Lazy<Measurement> Measured = new(Measure);
+	internal static readonly Lazy<Measurement> Measured = new(Measure);
 
 	/// <summary>What the thirty-day arc measured.</summary>
 	/// <param name="Float">Distance from the reference at each checkpoint, in km.</param>
 	/// <param name="Double">Distance from the reference at each checkpoint, in km.</param>
 	/// <param name="Decimal">Distance from the reference at each checkpoint, in km.</param>
 	/// <param name="ReferenceConvergence">Distance between 30- and 40-digit runs after one day, in km.</param>
-	private sealed record Measurement(double[] Float, double[] Double, double[] Decimal, double ReferenceConvergence);
+	internal sealed record Measurement(double[] Float, double[] Double, double[] Decimal, double ReferenceConvergence);
 
 	[TestMethod]
 	public void DoubleAccumulatesRoundOff_ThatIsReal_AndSmall()
