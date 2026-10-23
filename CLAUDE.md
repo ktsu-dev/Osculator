@@ -70,15 +70,15 @@ its tests count requests through a stub transport against a clock the test moves
 were **mutation-checked**: inverting the freshness comparison fails three of them, and removing the
 age term fails one. A cache test never seen to fail is not evidence of a cache.
 
-"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one
-path to the network for both clients: overlapping callers for a key share one request, a failed
-request is throttled (the whole window when a stale copy exists, `FailureBackoff` when nothing
-does), a stamp from the future is stale, the window cannot be set below `MinimumAllowedAge`
-(1 h), writes are temp-file-and-rename, and a cache that cannot be written keeps the response in
-memory rather than failing the call. Every result is a `Fetched<T>` carrying `FetchedAt` and
-`IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a download that
-ends earlier than the copy it would replace, because a truncated CSV still parses. Each of those
-was mutation-checked the same way: reverting any one fails at least one test.
+"Enforced" holds beyond one caller and a healthy service. `ResponseCache.FetchAsync` is the one path
+to the network for the CelesTrak, IERS, Space-Track and Horizons clients: overlapping callers for a
+key share one request, a failed request is throttled (the whole window when a stale copy exists,
+`FailureBackoff` when nothing does), a stamp from the future is stale, the window cannot be set
+below `MinimumAllowedAge` (1 h), writes are temp-file-and-rename, and a cache that cannot be written
+keeps the response in memory rather than failing the call. Every result is a `Fetched<T>` carrying
+`FetchedAt` and `IsStale`, so a stale fallback can be shown as one. The IERS client also refuses a
+download that ends earlier than the copy it would replace, because a truncated CSV still parses.
+Each of those was mutation-checked the same way: reverting any one fails at least one test.
 
 **Δ_data is measured, and it is much smaller than this file used to say.** `DataTermTests` runs
 every usable case in the verification set, perturbs each element field by half the step its
@@ -223,6 +223,10 @@ over it as vectors, in `double` with `EarthOrientation.Ignored` — a picture, n
 are coloured by Δ_arith (`float` or `decimal` against `double`) on a log scale. `GlobeTests` checks
 it against physics rather than snapshots: the ISS track peaks between 51.6° and 52.0° geodetic, and
 each ascending node falls 23.6° ± 0.3° west of the last.
+The selected object's orbit ribbon (`OrbitRibbon`) is one revolution with every sample rotated by
+the Earth of the instant shown, not its own, and drawn at its altitude on the globe; after one
+period it is back within 28 km of its start (J2's node regression), where the ground track over
+the same revolution is 2,640 km away. `OrbitRibbonTests` asserts both.
 
 **The M2 number exists: the ISS diverges by 10.9 km over a week.** `Divergence<T>` propagates an
 archived element set to a later set's epoch, evaluates the later set at its own epoch, and resolves
@@ -321,7 +325,7 @@ The scan propagates each object once per grid sample, not once per pair (#126), 
 `ConjunctionScreenOptions.MaximumCachedStates` states and taking larger sets in blocks; the output
 is byte-identical to the pair-by-pair scan, and 400 objects over a day went from 78 s to 6.0 s on
 one core. `ScreenAgainst` is the one-against-a-catalogue form, and both take progress and a
-cancellation token.
+cancellation token; the panel's sweep makes one such call per screen.
 The panel (`Osculator.App/Panels/ConjunctionScreeningPanel.cs`, logic in `ConjunctionSweep`)
 screens in `double` only, either the selected object against the catalogue or all against all
 among up to 400 objects matched by name; selecting a row re-finds that one approach in all four
@@ -361,6 +365,25 @@ quotients, which the `/` operator rounds to fifty digits whatever precision was 
 It costs about twelve seconds, because it sweeps the whole verification set twice in
 `PreciseNumber`. That is most of the test suite's runtime and it is the right trade for the one
 check that validates the repository's central claim.
+
+**Demonstration 2 is measured: `float` cannot represent a residual against laser ranging.**
+`TabulatedTruthResidual<T>` runs SGP4, the SP3 interpolation, the ITRF → TEME rotation and the
+difference all in one storage type, and `FloatQuantizationTests` runs it over the committed ILRS
+LAGEOS-1 hour at 5 s spacing. At LAGEOS's 12,270 km the `float` step is **2⁻¹⁰ km = 0.9766 m**,
+not the spec's 0.5 m, which is the LEO figure one binade down. Three things, all asserted:
+
+1. **Every TEME component of the `float` residual is a whole number of steps, exactly**, at every
+   one of 721 samples. Each state is on the lattice and the difference of two nearby ones is exact.
+2. **The `double` states stored as `float` make a staircase**: within one step of the `double`
+   residual, moving in whole steps on about a third of samples. That is representation alone.
+3. **`float` end to end scatters up to 33.6 m from `double`**, across 67–224 levels per component,
+   while `double` moves at most 117 mm per sample with a second difference under 0.7 mm.
+
+The element set is **fitted to the same hour**, not published (no public LAGEOS-1 set for
+2021-12-30 is available without Space-Track): 8.6 m RMS, 17 m worst after two-line rounding.
+The lattice depends on the radius, not on the element set. The panel (`FloatQuantizationPanel`)
+plots all three series per component; it samples no closer than 10 s, because 721 samples outgrow
+the 65,536 vertices one ImGui draw list can index and ImGui aborts the process.
 
 **Demonstration 4 is measured: round-off accumulated over a thirty-day integrated arc.**
 `Cowell<T>` integrates under any `IForceModel<T>` with the Prince–Dormand RK8(7)13M pair
@@ -708,7 +731,17 @@ Non-negotiable, in order. Gate 1 comes before anything else in the repository me
    GPS at 15-minute spacing, 1.5 mm for LAGEOS-1 at 2 minutes — which is the file's own millimetre
    resolution, not the polynomial. Within half a window of either end the window cannot be centred
    and the error rises to 135 mm and 54 mm; the interpolator refuses to go past the ends at all.
+   It refuses inside a gap too (#129): a step longer than 2.5 nominal spacings (the median step)
+   means epochs the file marked missing, and each run between gaps is read as a table of its own, so
+   beside a gap the window slides inwards as at an end. One missing epoch is bridged, since that is
+   the doubled step every held-out measurement above already crosses (`Sp3InterpolatorGapTests`).
    Thirty-digit arithmetic moves none of these by more than a few nanometres.
+   **M4's SGP4-vs-laser-ranging gate is wired end to end** (`LageosGate`, `TruthComparison<T>`):
+   a public element set propagated to every epoch of an ILRS orbit and resolved into RSW. Measured
+   on LAGEOS-2 against an ILRS prediction, 12 to 36 hours before the element set's epoch: **RMS
+   0.445 km, worst 0.627 km**, along-track 0.419 km RMS against 0.023 radial and 0.147 cross-track —
+   under a kilometre, where the spec projected "kilometres wrong". The LAGEOS-1 run against CDDIS
+   and Space-Track needs both accounts; `SlrResidualGateTests` says how to run it.
 5. `Δ_arith(PreciseNumber) ≡ 0` — the invariant proving the harness holds everything but the storage
    type fixed.
 6. Benchmarks in CI, per storage type per propagator. **Met for SGP4** as a budget gate on the
@@ -727,6 +760,16 @@ Every client caches to disk and works offline from cache. This is enforced, not 
   from the OS credential store by `OsCredentialStore` (Credential Manager, Keychain, Secret Service),
   whose remarks give the one command per platform that stores it. The client's tests run against a
   fixture in Space-Track's response shape that was built, not captured: no account is in the repo.
+  Every query goes through `ResponseCache.FetchAsync`, so a limiter refusal, a rejected login or an
+  outage serves the cached copy flagged `IsStale` and is not retried inside the back-off. Its
+  `{"error": ...}` object is classified like CelesTrak's `Invalid query:` — an answer, raised as
+  `SpaceTrackQueryRejectedException`, never cached and never answered from an older copy — except
+  the rate-limit error, which says nothing about the query and is throttled as an outage.
+  Conjunction data messages come from `cdm_public` in one query for every object, cached on the
+  same hourly window (`GetConjunctionsAsync`), with the miss distance converted from metres to km.
+- **Horizons** has no published quota. One request is in flight at a time process-wide, and every
+  table goes through `ResponseCache.FetchAsync` with the same stale-flag and back-off rules; a
+  refusal (`error` member, or a report with no table) is an answer and is never throttled.
 - **CDDIS** needs an Earthdata Login; credentials go to the OS credential store, **never** to a file
   in this repository. `Osculator.Data/Cddis/` reads the bearer token from the store under
   `osculator-earthdata` (Credential Manager, Keychain or the Secret Service; `OsCredentialStore`

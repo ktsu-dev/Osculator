@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -39,9 +40,15 @@ using ktsu.Osculator.Data.CelesTrak;
 /// client logs in again once and retries, and both requests go through the limiter.
 /// </para>
 /// <para>
-/// A request that fails — refused by the limiter, rejected at login, unreachable, or answered with
-/// something that is not an element set — falls back to whatever the cache holds at any age, as
-/// <see cref="CelesTrakClient"/> does. Only an empty cache lets the failure through.
+/// Every path to the network goes through <see cref="ResponseCache.FetchAsync"/>, as it does for
+/// <see cref="CelesTrakClient"/>, so overlapping callers for one query share one request and every
+/// result says when it was fetched and whether it is stale. A request that fails — refused by the
+/// limiter, rejected at login, unreachable, or answered with something that is not an element set —
+/// falls back to whatever the cache holds at any age, flagged <see cref="Fetched{T}.IsStale"/>, and
+/// the query is not sent again until the cache's back-off has passed. Only an empty cache lets the
+/// failure through. A query Space-Track rejects as wrong is an answer rather than an outage: it is
+/// raised as <see cref="SpaceTrackQueryRejectedException"/>, never cached, and never answered from
+/// an older copy.
 /// </para>
 /// </remarks>
 public sealed class SpaceTrackClient : IDisposable
@@ -113,32 +120,62 @@ public sealed class SpaceTrackClient : IDisposable
 	/// <summary>Reads the current element set for one catalogued object.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The element sets the service returned: one, or none for an unknown number.</returns>
+	/// <returns>
+	/// The element sets the service returned (one, or none for an unknown number), and whether they
+	/// are a stale copy served because the service could not answer.
+	/// </returns>
 	/// <exception cref="SpaceTrackException">The request failed and nothing was cached.</exception>
-	public async Task<IReadOnlyList<ElementSet>> GetObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
-		OmmJson.Read(await GetRawObjectAsync(noradCatalogId, cancellationToken).ConfigureAwait(false));
+	public async Task<Fetched<IReadOnlyList<ElementSet>>> GetObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
+		(await GetRawObjectAsync(noradCatalogId, cancellationToken).ConfigureAwait(false)).Map(OmmJson.Read);
 
 	/// <summary>
 	/// Reads the current element set of every object on orbit that has been updated in the last 30
 	/// days, which is the query Space-Track recommends for the full catalogue.
 	/// </summary>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The element sets, ascending by catalogue number.</returns>
+	/// <returns>The element sets, ascending by catalogue number, and whether they are a stale copy.</returns>
 	/// <exception cref="SpaceTrackException">The request failed and nothing was cached.</exception>
-	public async Task<IReadOnlyList<ElementSet>> GetCatalogueAsync(CancellationToken cancellationToken = default) =>
-		OmmJson.Read(await GetRawCatalogueAsync(cancellationToken).ConfigureAwait(false));
+	public async Task<Fetched<IReadOnlyList<ElementSet>>> GetCatalogueAsync(CancellationToken cancellationToken = default) =>
+		(await GetRawCatalogueAsync(cancellationToken).ConfigureAwait(false)).Map(OmmJson.Read);
 
 	/// <summary>Reads every past element set for one object, oldest epoch first.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="from">The first epoch day to include, or null for no lower bound.</param>
 	/// <param name="to">The day after the last epoch day to include, or null for no upper bound.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The history.</returns>
+	/// <returns>The history, and whether it is a stale copy.</returns>
 	/// <exception cref="ArgumentException"><paramref name="to"/> is not after <paramref name="from"/>.</exception>
 	/// <exception cref="SpaceTrackException">The request failed and nothing was cached.</exception>
-	public async Task<IReadOnlyList<ElementSet>> GetHistoryAsync(
+	public async Task<Fetched<IReadOnlyList<ElementSet>>> GetHistoryAsync(
 		int noradCatalogId, DateOnly? from = null, DateOnly? to = null, CancellationToken cancellationToken = default) =>
-		OmmJson.Read(await GetRawHistoryAsync(noradCatalogId, from, to, cancellationToken).ConfigureAwait(false));
+		(await GetRawHistoryAsync(noradCatalogId, from, to, cancellationToken).ConfigureAwait(false)).Map(OmmJson.Read);
+
+	/// <summary>
+	/// Reads every public conjunction data message whose time of closest approach is still ahead.
+	/// </summary>
+	/// <param name="cancellationToken">Cancels the request.</param>
+	/// <returns>The messages, earliest closest approach first, and whether they are a stale copy.</returns>
+	/// <exception cref="SpaceTrackException">The request failed and nothing was cached.</exception>
+	/// <remarks>
+	/// One query for every object rather than one per object: <c>cdm_public</c> names the two
+	/// objects in separate fields, so asking about one object would cost two requests against the
+	/// limit, and the whole upcoming set is small. The cache window applies to it as to <c>gp</c>.
+	/// </remarks>
+	public async Task<Fetched<IReadOnlyList<ConjunctionDataMessage>>> GetConjunctionsAsync(CancellationToken cancellationToken = default) =>
+		(await GetRawConjunctionsAsync(cancellationToken).ConfigureAwait(false)).Map(ConjunctionDataMessageJson.Read);
+
+	/// <summary>
+	/// Reads the upcoming public conjunction data messages that involve one object, as either party.
+	/// </summary>
+	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
+	/// <param name="cancellationToken">Cancels the request.</param>
+	/// <returns>The messages, earliest closest approach first, and whether they are a stale copy.</returns>
+	/// <exception cref="SpaceTrackException">The request failed and nothing was cached.</exception>
+	/// <remarks>Filtered from the same cached response <see cref="GetConjunctionsAsync(CancellationToken)"/> reads.</remarks>
+	public async Task<Fetched<IReadOnlyList<ConjunctionDataMessage>>> GetConjunctionsAsync(
+		int noradCatalogId, CancellationToken cancellationToken = default) =>
+		(await GetConjunctionsAsync(cancellationToken).ConfigureAwait(false))
+			.Map<IReadOnlyList<ConjunctionDataMessage>>(messages => [.. messages.Where(message => message.Involves(noradCatalogId))]);
 
 	/// <summary>
 	/// Reads one object's history and archives every set the snapshot store does not already hold.
@@ -160,32 +197,38 @@ public sealed class SpaceTrackClient : IDisposable
 	{
 		Ensure.NotNull(store);
 
-		return store.Add(await GetRawHistoryAsync(noradCatalogId, from, to, cancellationToken).ConfigureAwait(false));
+		return store.Add((await GetRawHistoryAsync(noradCatalogId, from, to, cancellationToken).ConfigureAwait(false)).Value);
 	}
 
 	/// <summary>Reads one object's current element set as the service wrote it.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
-	public Task<string> GetRawObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
-		FetchAsync(ObjectQuery(noradCatalogId), cancellationToken);
+	/// <returns>The response body, and whether it is a stale copy.</returns>
+	public Task<Fetched<string>> GetRawObjectAsync(int noradCatalogId, CancellationToken cancellationToken = default) =>
+		FetchAsync(ObjectQuery(noradCatalogId), ValidateElementSets, cancellationToken);
 
 	/// <summary>Reads the full catalogue as the service wrote it.</summary>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
-	public Task<string> GetRawCatalogueAsync(CancellationToken cancellationToken = default) =>
-		FetchAsync(CatalogueQuery(), cancellationToken);
+	/// <returns>The response body, and whether it is a stale copy.</returns>
+	public Task<Fetched<string>> GetRawCatalogueAsync(CancellationToken cancellationToken = default) =>
+		FetchAsync(CatalogueQuery(), ValidateElementSets, cancellationToken);
 
 	/// <summary>Reads one object's history as the service wrote it.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
 	/// <param name="from">The first epoch day to include, or null for no lower bound.</param>
 	/// <param name="to">The day after the last epoch day to include, or null for no upper bound.</param>
 	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
+	/// <returns>The response body, and whether it is a stale copy.</returns>
 	/// <exception cref="ArgumentException"><paramref name="to"/> is not after <paramref name="from"/>.</exception>
-	public Task<string> GetRawHistoryAsync(
+	public Task<Fetched<string>> GetRawHistoryAsync(
 		int noradCatalogId, DateOnly? from = null, DateOnly? to = null, CancellationToken cancellationToken = default) =>
-		FetchAsync(HistoryQuery(noradCatalogId, from, to), cancellationToken);
+		FetchAsync(HistoryQuery(noradCatalogId, from, to), ValidateElementSets, cancellationToken);
+
+	/// <summary>Reads the upcoming public conjunction data messages as the service wrote them.</summary>
+	/// <param name="cancellationToken">Cancels the request.</param>
+	/// <returns>The response body, and whether it is a stale copy.</returns>
+	public Task<Fetched<string>> GetRawConjunctionsAsync(CancellationToken cancellationToken = default) =>
+		FetchAsync(ConjunctionQuery(), body => _ = ConjunctionDataMessageJson.Read(body), cancellationToken);
 
 	/// <summary>The path for one object's current element set.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
@@ -197,6 +240,15 @@ public sealed class SpaceTrackClient : IDisposable
 	/// <returns>The path, already escaped.</returns>
 	internal static string CatalogueQuery() =>
 		$"{QueryPrefix}gp/decay_date/null-val/epoch/%3Enow-30/orderby/norad_cat_id/format/json";
+
+	/// <summary>The path for every public conjunction data message still ahead.</summary>
+	/// <returns>The path, already escaped.</returns>
+	/// <remarks>
+	/// "now" is evaluated by Space-Track, so the path, and with it the cache key, is the same on every
+	/// call, which is what lets the cache window hold.
+	/// </remarks>
+	internal static string ConjunctionQuery() =>
+		$"{QueryPrefix}cdm_public/TCA/%3Enow/orderby/TCA%20asc/format/json";
 
 	/// <summary>The path for one object's element-set history.</summary>
 	/// <param name="noradCatalogId">The NORAD catalogue number.</param>
@@ -243,74 +295,141 @@ public sealed class SpaceTrackClient : IDisposable
 		return pairs.Length == 0 ? null : string.Join("; ", pairs);
 	}
 
+	private static void ValidateElementSets(string body) => _ = OmmJson.Read(body);
+
 	private static string Day(DateOnly day) => day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
 	/// <summary>
-	/// Returns a cached response when one is fresh enough, and otherwise asks the service.
+	/// Whether a failure means Space-Track could not answer, so the stale copy may stand in and the
+	/// query is not asked again until <see cref="ResponseCache"/>'s back-off has passed.
+	/// </summary>
+	/// <param name="failure">The failure.</param>
+	/// <returns>
+	/// True for transport failures, error statuses, timeouts, unparseable bodies, the limiter's
+	/// refusal, a rejected or impossible login, and Space-Track's own rate-limit error.
+	/// </returns>
+	/// <remarks>
+	/// A <see cref="SpaceTrackQueryRejectedException"/> is not among them: Space-Track was reached and
+	/// said the query itself is wrong, which an old copy of the answer would hide. Its rate-limit
+	/// error is the exception to that, because it says nothing about the query: it is the service
+	/// declining to answer anything, which is what the back-off exists for.
+	/// </remarks>
+	internal static bool IsUnavailable(Exception failure) =>
+		failure is HttpRequestException or JsonException or TaskCanceledException
+			or (SpaceTrackException and not SpaceTrackQueryRejectedException);
+
+	/// <summary>
+	/// Returns a cached response when one is fresh enough, and otherwise asks the service, through
+	/// <see cref="ResponseCache.FetchAsync"/> so overlapping callers share one request and a failing
+	/// query is not sent again on every call.
 	/// </summary>
 	/// <param name="query">The query path, which with a prefix is also the cache key.</param>
-	/// <param name="cancellationToken">Cancels the request.</param>
-	/// <returns>The response body.</returns>
-	private async Task<string> FetchAsync(string query, CancellationToken cancellationToken)
+	/// <param name="validate">Throws when a body is not what the query asks for.</param>
+	/// <param name="cancellationToken">Cancels the caller's wait.</param>
+	/// <returns>The response body, with when it was fetched and whether it is a stale copy.</returns>
+	private async Task<Fetched<string>> FetchAsync(string query, Action<string> validate, CancellationToken cancellationToken)
 	{
 		// Prefixed so a cache directory shared with CelesTrak can never answer one source's query
 		// with the other's response.
 		string key = "spacetrack:" + query;
 
-		string? fresh = Cache.Read(key);
-
-		if (fresh is not null)
-		{
-			return fresh;
-		}
-
-		// One request at a time: the limit is per account, and two callers racing to log in would
-		// spend two requests on one session.
-		await network.WaitAsync(cancellationToken).ConfigureAwait(false);
-
 		try
 		{
-			// Whoever held the gate may have just fetched this very key.
-			fresh = Cache.Read(key);
-
-			if (fresh is not null)
-			{
-				return fresh;
-			}
-
-			string body = await QueryAsync(query, cancellationToken).ConfigureAwait(false);
-
-			// Parsed before it is cached. Space-Track reports a broken limit or a bad query as a JSON
-			// object with an "error" member, which is not an element set and must never displace one.
-			_ = OmmJson.Read(body);
-
-			Cache.Write(key, body);
-			return body;
+			return await Cache.FetchAsync(
+				key,
+				(_, token) => DownloadAsync(query, validate, token),
+				IsUnavailable,
+				cancellationToken).ConfigureAwait(false);
 		}
-		catch (Exception failure) when (
-			failure is HttpRequestException or JsonException or SpaceTrackException
-			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+		catch (ResponseUnavailableException unavailable)
 		{
-			string? stale = Cache.ReadAtAnyAge(key);
-
-			if (stale is not null)
+			// The limiter's refusal carries how long to wait, and a rejected login names the account;
+			// both reach the caller as they were raised rather than behind a generic message.
+			if (unavailable.InnerException is SpaceTrackException specific)
 			{
-				return stale;
-			}
-
-			if (failure is SpaceTrackException)
-			{
-				throw;
+				ExceptionDispatchInfo.Capture(specific).Throw();
 			}
 
 			throw new SpaceTrackException(
 				FormattableString.Invariant($"Space-Track could not answer {query} and nothing is cached."),
-				failure);
+				unavailable.InnerException ?? unavailable);
+		}
+	}
+
+	/// <summary>Asks the service once, and classifies what it says.</summary>
+	/// <param name="query">The query path.</param>
+	/// <param name="validate">Throws when a body is not what the query asks for.</param>
+	/// <param name="cancellationToken">Ends the request on a transport timeout.</param>
+	/// <returns>A body that has been validated, ready to cache.</returns>
+	private async Task<string> DownloadAsync(string query, Action<string> validate, CancellationToken cancellationToken)
+	{
+		// One request at a time across every key: the limit is per account, and two callers racing
+		// to log in would spend two requests on one session.
+		await network.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+		try
+		{
+			string body = await QueryAsync(query, cancellationToken).ConfigureAwait(false);
+
+			// Space-Track reports a broken limit or a bad query as a 200 and a JSON object with an
+			// "error" member. Classified before the body is parsed, so the two can be told apart.
+			ThrowIfError(body, query);
+
+			// Parsed before it is cached, so nothing that is not an answer displaces a good copy.
+			validate(body);
+
+			return body;
 		}
 		finally
 		{
 			_ = network.Release();
 		}
+	}
+
+	/// <summary>Raises Space-Track's <c>error</c> object as the exception it means.</summary>
+	/// <param name="body">The response body.</param>
+	/// <param name="query">The query, for the message.</param>
+	/// <exception cref="SpaceTrackRateLimitException">The error is Space-Track's rate limit.</exception>
+	/// <exception cref="SpaceTrackQueryRejectedException">Any other error.</exception>
+	internal static void ThrowIfError(string body, string query)
+	{
+		Ensure.NotNull(body);
+
+		if (!body.TrimStart().StartsWith('{'))
+		{
+			return;
+		}
+
+		string? error;
+
+		try
+		{
+			using JsonDocument document = JsonDocument.Parse(body);
+
+			if (document.RootElement.ValueKind != JsonValueKind.Object
+				|| !document.RootElement.TryGetProperty("error", out JsonElement member))
+			{
+				return;
+			}
+
+			error = member.ValueKind == JsonValueKind.String ? member.GetString() : member.GetRawText();
+		}
+		catch (JsonException)
+		{
+			// Not JSON at all; the validator reports it.
+			return;
+		}
+
+		error ??= string.Empty;
+
+		if (error.Contains("rate limit", StringComparison.OrdinalIgnoreCase))
+		{
+			throw new SpaceTrackRateLimitException(
+				FormattableString.Invariant($"Space-Track refused {query} for exceeding its rate limit: {error}"));
+		}
+
+		throw new SpaceTrackQueryRejectedException(
+			FormattableString.Invariant($"Space-Track rejected the query {query}: {error}"));
 	}
 
 	/// <summary>Sends one query, logging in first if there is no session and again if it expired.</summary>
