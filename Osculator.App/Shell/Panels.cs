@@ -25,6 +25,7 @@ internal static class Panels
 		registry.Register<global::ktsu.Osculator.App.Panels.ElementInspectorPanel>();
 		registry.Register<ConjunctionScreeningPanel>();
 		registry.Register<KeplerDemoPanel>();
+		registry.Register<DecompositionPanel>();
 		registry.Register<CowellRoundOffPanel>();
 		registry.Register<FloatQuantizationPanel>();
 	}
