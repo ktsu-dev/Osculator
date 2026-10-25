@@ -40,3 +40,9 @@ Selecting an approach finds it again in float, double, decimal and PreciseNumber
 
 ![A close approach in every storage type](a-close-approach-in-every-storage-type.png)
 
+## Cowell round-off over thirty days
+
+A two-body orbit integrated for a month in fixed two-minute steps, in each storage type, against a 30-digit run of the same integration. Float ends thousands of kilometres out and double a few millimetres, and both grow as roughly the square of the arc rather than the spec's square root, because each rounding error is also an error in the orbit's period.
+
+![Cowell round-off over thirty days](cowell-round-off-over-thirty-days.png)
+

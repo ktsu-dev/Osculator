@@ -29,6 +29,7 @@ internal static class Panels
 		registry.Register<GlobeWindow>();
 		registry.Register<ResidualPlotsWindow>();
 		registry.Register<TimeInspectorWindow>();
+		registry.Register<DecompositionPanel>();
 		registry.Register<CowellRoundOffPanel>();
 		registry.Register<FloatQuantizationPanel>();
 	}
