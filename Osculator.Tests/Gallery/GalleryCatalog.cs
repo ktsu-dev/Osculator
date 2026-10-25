@@ -104,6 +104,16 @@ internal static class GalleryCatalog
 				panel.SelectRow(0);
 				stage.Settle(() => panel.Comparison is not null, 5000, "the approach to be measured in every storage type");
 			}),
+		new(
+			"Cowell round-off over thirty days",
+			"A two-body orbit integrated for a month in fixed two-minute steps, in each storage type, against a 30-digit run of the same integration. Float ends thousands of kilometres out and double a few millimetres, and both grow as roughly the square of the arc rather than the spec's square root, because each rounding error is also an error in the orbit's period.",
+			stage =>
+			{
+				stage.ShowAlone<CowellRoundOffPanel>();
+				CowellRoundOffPanel panel = stage.Panel<CowellRoundOffPanel>();
+				panel.Measure();
+				stage.Settle(() => panel.Result is not null, 20000, "the thirty-day arc to be integrated in every storage type");
+			}),
 	];
 
 	private static ElementSet Station => Constructed(90001, "STATION");
