@@ -22,9 +22,11 @@ using ktsu.Osculator.Data.CelesTrak;
 /// instant up to the present — which is why that is the last fallback here rather than an exception.
 /// </para>
 /// <para>
-/// The same discipline as <see cref="IersClient"/>: a body is parsed before it is written, so a
-/// truncated download never displaces a good cached copy, and the caller's own cancellation is never
-/// answered from the cache.
+/// The same discipline as <see cref="IersClient"/>: every fetch goes through
+/// <see cref="ResponseCache.FetchAsync"/>, so failures are throttled and concurrent callers share one
+/// request; a body is parsed before it is written, and one whose last entry is earlier than the cached
+/// copy's or the built-in table's is refused as truncated, so it never displaces a good copy; and the
+/// caller's own cancellation is never answered from the cache.
 /// </para>
 /// </remarks>
 public sealed class LeapSecondClient(HttpClient http, ResponseCache cache)
@@ -44,28 +46,70 @@ public sealed class LeapSecondClient(HttpClient http, ResponseCache cache)
 	{
 		Ensure.NotNull(cache);
 
-		string? fresh = cache.Read(CacheKey);
-
-		if (fresh is not null)
+		try
 		{
-			return LeapSeconds.Parse(fresh);
+			Fetched<string> fetched = await cache.FetchAsync(
+				CacheKey,
+				DownloadAsync,
+				failure => failure is HttpRequestException or FormatException or TaskCanceledException,
+				cancellationToken).ConfigureAwait(false);
+
+			return LeapSeconds.Parse(fetched.Value);
+		}
+		catch (ResponseUnavailableException)
+		{
+			return LeapSeconds.BuiltIn;
+		}
+	}
+
+	/// <summary>Downloads the file and refuses a copy that ends earlier than one already known.</summary>
+	/// <param name="cached">The copy currently cached at any age, or null.</param>
+	/// <param name="cancellationToken">Cancels the download.</param>
+	/// <returns>The body to cache.</returns>
+	/// <exception cref="FormatException">The body is not a usable table, or ends early.</exception>
+	private async Task<string> DownloadAsync(string? cached, CancellationToken cancellationToken)
+	{
+		string body = await http.GetStringAsync(new Uri(Endpoint), cancellationToken).ConfigureAwait(false);
+
+		// Parsing catches a redirect or a login page. It does not catch a download cut at a line
+		// boundary: any run of rows in date order parses, and the header keeps its expiry date. The
+		// table only ever grows at its end, so one whose last leap second is earlier than the cached
+		// copy's, or than the last one compiled in, is a truncated one.
+		LeapSeconds table = LeapSeconds.Parse(body);
+		int last = table.Entries[^1].ModifiedJulianDay;
+		int floor = LeapSeconds.BuiltIn.Entries[^1].ModifiedJulianDay;
+
+		if (TryParse(cached) is LeapSeconds held && held.Entries[^1].ModifiedJulianDay > floor)
+		{
+			floor = held.Entries[^1].ModifiedJulianDay;
+		}
+
+		if (last < floor)
+		{
+			throw new FormatException(FormattableString.Invariant(
+				$"The downloaded leap-second table ends at MJD {last}, earlier than MJD {floor}; treating it as truncated."));
+		}
+
+		return body;
+	}
+
+	/// <summary>Parses a cached copy, or gives null when there is none or it no longer parses.</summary>
+	/// <param name="cached">The cached body.</param>
+	/// <returns>The table.</returns>
+	private static LeapSeconds? TryParse(string? cached)
+	{
+		if (cached is null)
+		{
+			return null;
 		}
 
 		try
 		{
-			string body = await http.GetStringAsync(new Uri(Endpoint), cancellationToken).ConfigureAwait(false);
-			LeapSeconds table = LeapSeconds.Parse(body);
-			cache.Write(CacheKey, body);
-
-			return table;
+			return LeapSeconds.Parse(cached);
 		}
-		catch (Exception failure) when (
-			failure is HttpRequestException or FormatException
-			|| (failure is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+		catch (FormatException)
 		{
-			string? stale = cache.ReadAtAnyAge(CacheKey);
-
-			return stale is not null ? LeapSeconds.Parse(stale) : LeapSeconds.BuiltIn;
+			return null;
 		}
 	}
 }

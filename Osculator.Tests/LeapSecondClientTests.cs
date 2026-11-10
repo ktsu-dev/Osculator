@@ -100,6 +100,86 @@ public sealed class LeapSecondClientTests
 			() => client.GetTableAsync(cancelled.Token)).ConfigureAwait(false);
 	}
 
+	[TestMethod]
+	public async Task ATruncatedDownloadDoesNotDisplaceTheFullCachedTable()
+	{
+		CountingHandler handler = Transport(TimeScaleTests.IersSample);
+		FakeClock clock = new(new DateTimeOffset(2026, 10, 7, 0, 0, 0, TimeSpan.Zero));
+		LeapSecondClient client = ClientOver(handler, clock, TimeSpan.FromDays(30));
+
+		LeapSeconds full = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreEqual(37, full.TaiMinusUtcAtUtc(61000.0));
+
+		// Cut at a line boundary: it still parses, and keeps its header and expiry date
+		clock.Advance(TimeSpan.FromDays(31));
+		handler.Body = CutBefore(TimeScaleTests.IersSample, "56109.0");
+
+		LeapSeconds afterCut = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreEqual(2, handler.Requests);
+		Assert.AreEqual(37, afterCut.TaiMinusUtcAtUtc(61000.0), "The truncated download replaced the full table.");
+
+		clock.Advance(TimeSpan.FromDays(31));
+		handler.FailWith = new HttpRequestException("no route to host");
+
+		LeapSeconds offline = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreEqual(37, offline.TaiMinusUtcAtUtc(61000.0), "The cache should still hold the full table.");
+		Assert.HasCount(full.Entries.Count, offline.Entries);
+	}
+
+	[TestMethod]
+	public async Task ATruncatedDownloadWithNothingCachedIsRefusedForTheBuiltInTable()
+	{
+		CountingHandler handler = Transport(CutBefore(TimeScaleTests.IersSample, "56109.0"));
+		LeapSecondClient client = ClientOver(handler, new FakeClock(DateTimeOffset.UnixEpoch), TimeSpan.FromDays(30));
+
+		LeapSeconds table = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreSame(LeapSeconds.BuiltIn, table);
+	}
+
+	[TestMethod]
+	public async Task ADownServerIsNotAskedAgainOnEveryCall()
+	{
+		CountingHandler handler = Transport(TimeScaleTests.IersSample);
+		handler.FailWith = new HttpRequestException("no route to host");
+		LeapSecondClient client = ClientOver(handler, new FakeClock(DateTimeOffset.UnixEpoch), TimeSpan.FromDays(30));
+
+		for (int i = 0; i < 5; i++)
+		{
+			Assert.AreSame(LeapSeconds.BuiltIn, await client.GetTableAsync().ConfigureAwait(false));
+		}
+
+		Assert.AreEqual(1, handler.Requests);
+	}
+
+	[TestMethod]
+	public async Task ACacheThatCannotBeWrittenStillAnswersWithTheFetchedTable()
+	{
+		CountingHandler handler = Transport(TimeScaleTests.IersSample);
+
+		// A file where the cache directory should be makes every write fail with an IOException
+		string blocked = Path.Join(root, "blocked");
+		await File.WriteAllTextAsync(blocked, string.Empty).ConfigureAwait(false);
+		HttpClient http = new(handler, disposeHandler: false);
+		owned.Add(http);
+		LeapSecondClient client = new(http, new ResponseCache(Path.Join(blocked, "cache"), TimeSpan.FromDays(30), new FakeClock(DateTimeOffset.UnixEpoch)));
+
+		LeapSeconds table = await client.GetTableAsync().ConfigureAwait(false);
+
+		Assert.AreEqual(new DateOnly(2027, 6, 28), table.ExpiresOn);
+	}
+
+	/// <summary>Cuts <paramref name="text"/> at the start of the line holding <paramref name="marker"/>.</summary>
+	private static string CutBefore(string text, string marker)
+	{
+		int at = text.IndexOf(marker, StringComparison.Ordinal);
+		Assert.IsGreaterThan(0, at, $"The sample has no {marker} row.");
+		return text[..(text.LastIndexOf('\n', at) + 1)];
+	}
+
 	private CountingHandler Transport(string body)
 	{
 		CountingHandler handler = new(body);
