@@ -133,7 +133,7 @@ public static class Sp3Parser
 					// millimetre, so anything under half of one on every axis is that marker; a real
 					// orbit passes nowhere near the centre of the Earth.
 					const double HalfLastDigitKm = 5e-7;
-					if (Math.Abs(x) < HalfLastDigitKm && Math.Abs(y) < HalfLastDigitKm && Math.Abs(z) < HalfLastDigitKm)
+					if (IsMissingMarker(x, y, z, HalfLastDigitKm))
 					{
 						break;
 					}
@@ -167,15 +167,26 @@ public static class Sp3Parser
 						break;
 					}
 
+					double vx = Number(line, 5, 18, lineNumber);
+					double vy = Number(line, 19, 32, lineNumber);
+					double vz = Number(line, 33, 46, lineNumber);
+
+					// All three zero is the format's "bad or absent velocity", as it is for a position.
+					// The file writes six decimals of decimetres per second, so anything under half of
+					// one on every axis is that marker. The position is kept and the velocity is left
+					// unknown: a zero velocity would read as a measured one, and a truth built from it
+					// has a degenerate RIC frame and a Lagrange window that rings around it.
+					const double HalfLastDigitDecimetresPerSecond = 5e-7;
+					if (IsMissingMarker(vx, vy, vz, HalfLastDigitDecimetresPerSecond))
+					{
+						break;
+					}
+
 					// Decimetres per second to kilometres per second, and 1e-4 microseconds per second
 					// to microseconds per second.
 					const double Scale = 1e-4;
 					double? rate = Clock(line, lineNumber);
-					Sp3Velocity velocity = new(
-						Number(line, 5, 18, lineNumber) * Scale,
-						Number(line, 19, 32, lineNumber) * Scale,
-						Number(line, 33, 46, lineNumber) * Scale,
-						rate * Scale);
+					Sp3Velocity velocity = new(vx * Scale, vy * Scale, vz * Scale, rate * Scale);
 
 					entries[^1] = entries[^1] with { Velocity = velocity };
 					break;
@@ -194,6 +205,15 @@ public static class Sp3Parser
 
 		return new Sp3File(header, satellites, epochs, records);
 	}
+
+	/// <summary>Whether a record's three components are the format's all-zero "bad or absent" marker.</summary>
+	/// <param name="x">The first component, in the file's units.</param>
+	/// <param name="y">The second component.</param>
+	/// <param name="z">The third component.</param>
+	/// <param name="halfLastDigit">Half of the last digit the file writes, in the same units.</param>
+	/// <returns><see langword="true"/> when every component is under half a last digit from zero.</returns>
+	private static bool IsMissingMarker(double x, double y, double z, double halfLastDigit) =>
+		Math.Abs(x) < halfLastDigit && Math.Abs(y) < halfLastDigit && Math.Abs(z) < halfLastDigit;
 
 	private static Sp3Header ReadFirstLines(string[] lines)
 	{
