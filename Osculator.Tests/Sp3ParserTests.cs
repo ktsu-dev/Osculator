@@ -5,6 +5,7 @@ namespace ktsu.Osculator.Tests;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ktsu.Osculator.Core.Propagation;
 using ktsu.Osculator.Core.Time;
 using ktsu.Osculator.Data.Sp3;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -191,6 +192,71 @@ public sealed class Sp3ParserTests
 	}
 
 	[TestMethod]
+	public void AnAbsentVelocityIsLeftUnknown_NotReadAsAZeroVelocity()
+	{
+		string altered = WithSecondLageosVelocityZeroed();
+
+		IReadOnlyList<Sp3Record> l51 = Sp3Parser.Parse(altered).RecordsOf("L51");
+		IReadOnlyList<Sp3Record> original = Sp3Parser.Parse(Lageos).RecordsOf("L51");
+
+		// The position at that epoch is good and is kept; only the velocity is unknown.
+		Assert.HasCount(31, l51);
+		Assert.AreEqual(original[1].X, l51[1].X);
+		Assert.AreEqual(original[1].Y, l51[1].Y);
+		Assert.AreEqual(original[1].Z, l51[1].Z);
+		Assert.IsNull(l51[1].Velocity);
+		Assert.IsNotNull(l51[0].Velocity);
+		Assert.IsNotNull(l51[2].Velocity);
+	}
+
+	[TestMethod]
+	public void TheVelocityTable_MatchesThePositionTable()
+	{
+		Sp3File file = Sp3Parser.Parse(Lageos);
+		IReadOnlyList<Sp3Record> l51 = file.RecordsOf("L51");
+
+		IReadOnlyList<TabulatedPosition<double>> positions = file.Tabulate<double>("L51");
+		IReadOnlyList<TabulatedPosition<double>> velocities = file.TabulateVelocities<double>("L51");
+
+		Assert.HasCount(positions.Count, velocities);
+
+		for (int i = 0; i < l51.Count; i++)
+		{
+			Assert.AreEqual(positions[i].Seconds, velocities[i].Seconds);
+			Assert.AreEqual(l51[i].Velocity!.Value.X, velocities[i].X);
+			Assert.AreEqual(l51[i].Velocity!.Value.Y, velocities[i].Y);
+			Assert.AreEqual(l51[i].Velocity!.Value.Z, velocities[i].Z);
+		}
+	}
+
+	[TestMethod]
+	public void AVelocityTableWithAnAbsentVelocity_IsRefusedNamingTheEpoch()
+	{
+		Sp3File file = Sp3Parser.Parse(WithSecondLageosVelocityZeroed());
+		Sp3Record gap = file.RecordsOf("L51")[1];
+
+		InvalidOperationException e = Assert.ThrowsExactly<InvalidOperationException>(() => file.TabulateVelocities<double>("L51"));
+
+		StringAssert.Contains(e.Message, "L51");
+		StringAssert.Contains(e.Message, gap.Instant.ToString());
+	}
+
+	[TestMethod]
+	public void AVelocityTableFromAPositionOnlyFile_IsRefused() =>
+		Assert.ThrowsExactly<InvalidOperationException>(() => Sp3Parser.Parse(Igs).TabulateVelocities<double>("G02"));
+
+	[TestMethod]
 	public void AskingForAnUndeclaredSatelliteThrows() =>
 		Assert.ThrowsExactly<ArgumentException>(() => Sp3Parser.Parse(Igs).RecordsOf("G07"));
+
+	/// <summary>The LAGEOS-1 excerpt with its second velocity record written as the format's "bad or absent" marker.</summary>
+	/// <returns>The altered file.</returns>
+	private static string WithSecondLageosVelocityZeroed()
+	{
+		int first = Lageos.IndexOf("\nVL51", StringComparison.Ordinal);
+		int at = Lageos.IndexOf("\nVL51", first + 1, StringComparison.Ordinal);
+		int end = Lageos.IndexOf('\n', at + 1);
+		const string Absent = "\nVL51      0.000000      0.000000      0.000000";
+		return Lageos[..at] + Absent + Lageos[end..];
+	}
 }

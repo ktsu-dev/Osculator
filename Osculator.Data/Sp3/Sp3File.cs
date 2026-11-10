@@ -123,4 +123,46 @@ public sealed class Sp3File
 
 		return table;
 	}
+
+	/// <summary>
+	/// One satellite's velocities as the table an <see cref="Sp3Interpolator{T}"/> reads, at the same
+	/// times as <see cref="Tabulate{T}(string)"/>.
+	/// </summary>
+	/// <typeparam name="T">The numeric storage type.</typeparam>
+	/// <param name="satellite">The identifier.</param>
+	/// <returns>
+	/// Its velocities, in km/s, timed in seconds after <see cref="Start"/>. Carried in a
+	/// <see cref="TabulatedPosition{T}"/> because that is the shape the interpolator reads.
+	/// </returns>
+	/// <exception cref="ArgumentException">The header does not declare that satellite.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// A kept position has no velocity, because the file has none or marks that one as bad or absent.
+	/// </exception>
+	/// <remarks>
+	/// A gap is refused rather than skipped. Leaving one epoch out of the velocity table would put it
+	/// out of step with the position table, and filling it with zero is the corruption the format's
+	/// marker exists to prevent.
+	/// </remarks>
+	public IReadOnlyList<TabulatedPosition<T>> TabulateVelocities<T>(string satellite)
+		where T : struct, INumber<T>
+	{
+		IReadOnlyList<Sp3Record> source = RecordsOf(satellite);
+		TabulatedPosition<T>[] table = new TabulatedPosition<T>[source.Count];
+
+		for (int i = 0; i < source.Count; i++)
+		{
+			Sp3Record r = source[i];
+			Sp3Velocity v = r.Velocity
+				?? throw new InvalidOperationException(
+					$"{satellite} has no velocity at {r.Instant} ({r.SecondsSinceStart} s after the start): the file has none there, or marks it as bad or absent.");
+
+			table[i] = new TabulatedPosition<T>(
+				T.CreateChecked(r.SecondsSinceStart),
+				T.CreateChecked(v.X),
+				T.CreateChecked(v.Y),
+				T.CreateChecked(v.Z));
+		}
+
+		return table;
+	}
 }
