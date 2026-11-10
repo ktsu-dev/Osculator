@@ -166,8 +166,25 @@ public sealed class TleWriterTests
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { Inclination = -1.0 }));
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { RevolutionAtEpoch = 100000 }));
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { ElementSetNumber = 10000 }));
-		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { ObjectId = "1998-067ABC" }));
+		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { ObjectId = "1993-036ABCD" }));
 		Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => TleWriter.Write(iss with { Epoch = new DateTime(2057, 1, 1, 0, 0, 0, DateTimeKind.Utc) }));
+	}
+
+	[TestMethod]
+	[DataRow("1998-067A", "98067A  ", "98067A")]
+	[DataRow("2022-151AB", "22151AB ", "22151AB")]
+	[DataRow("1993-036AXX", "93036AXX", "93036AXX")]
+	[DataRow("98067A", "98067A  ", "98067A")]
+	public void AnOmmDesignatorWithAnyPieceLength_IsCompactedToTheTwoLineForm(string objectId, string columns, string reread)
+	{
+		// A launch piece has one to three letters, so OMM's OBJECT_ID is nine to eleven characters,
+		// and every one of those lengths fits the eight columns once the century and hyphen are gone.
+		ElementSet iss = TleParser.Parse(IssLine1, IssLine2) with { ObjectId = objectId };
+
+		TleLines written = TleWriter.Write(iss);
+
+		Assert.AreEqual(columns, written.Line1[9..17]);
+		Assert.AreEqual(reread, TleParser.Parse(written.Line1, written.Line2).ObjectId);
 	}
 
 	[TestMethod]

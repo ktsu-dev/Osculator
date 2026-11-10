@@ -202,14 +202,15 @@ public static class TleWriter
 	/// <returns>The eight characters.</returns>
 	/// <exception cref="ArgumentOutOfRangeException">The designator is longer than eight characters.</exception>
 	/// <remarks>
-	/// OMM writes the designator as <c>1998-067A</c>, which is nine characters and the same object.
-	/// That form is compacted to the two-line one rather than refused.
+	/// OMM writes the designator as <c>1998-067A</c>, with a launch piece of one to three letters, so
+	/// nine to eleven characters for the same object. That form is compacted to the two-line one
+	/// (<c>98067A</c>, <c>22151AB</c>, <c>93036AXX</c>) rather than refused.
 	/// </remarks>
 	private static string Designator(string designator)
 	{
 		string text = designator ?? string.Empty;
 
-		if (text.Length == 9 && text[4] == '-')
+		if (IsOmmDesignator(text))
 		{
 			text = string.Concat(text.AsSpan(2, 2), text.AsSpan(5));
 		}
@@ -220,6 +221,35 @@ public static class TleWriter
 		}
 
 		return text.PadRight(8);
+	}
+
+	/// <summary>Whether a designator is in OMM's <c>YYYY-NNNP{PP}</c> form: four digits, a hyphen, three digits and one to three letters.</summary>
+	/// <param name="text">The designator.</param>
+	/// <returns><see langword="true"/> when the text is in that form.</returns>
+	private static bool IsOmmDesignator(string text)
+	{
+		if (text.Length is < 9 or > 11 || text[4] != '-')
+		{
+			return false;
+		}
+
+		for (int i = 0; i < text.Length; i++)
+		{
+			char c = text[i];
+			bool valid = i switch
+			{
+				4 => true,
+				< 8 => c is >= '0' and <= '9',
+				_ => c is >= 'A' and <= 'Z',
+			};
+
+			if (!valid)
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/// <summary>Writes the first derivative of mean motion: a sign and eight decimals with no leading zero.</summary>
