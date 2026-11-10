@@ -112,6 +112,14 @@ public sealed class Cowell<T>
 				}
 
 				largest = Math.Max(largest, hTaken);
+
+				// The arc is done. The clipped step was sized by what was left of the arc, not by the
+				// controller, so the step it would grow to next means nothing and must not trip the
+				// floor after the integration has already succeeded.
+				if (last)
+				{
+					break;
+				}
 			}
 			else
 			{

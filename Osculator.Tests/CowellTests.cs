@@ -135,6 +135,46 @@ public sealed class CowellTests
 	}
 
 	[TestMethod]
+	public void AnArcShorterThanAFifthOfTheFloor_IsReturnedRatherThanRefused()
+	{
+		// The only step is clipped to the whole arc. Growing from it by the largest factor allowed
+		// still lands under the floor, which used to throw after the arc had been integrated.
+		IStorageMath<double> math = DoubleStorageMath.Instance;
+		Cowell<double> cowell = new(new TwoBody<double>(Mu, math), math);
+
+		CowellResult<double> result = cowell.Propagate(new(7000.0, 0.0, 0.0, 0.0, 4.6875, 5.90625), 0.0001, CowellTolerance.Default);
+
+		Assert.AreEqual(0.0001, result.ElapsedSeconds);
+		Assert.AreEqual(1, result.AcceptedSteps);
+	}
+
+	[TestMethod]
+	[DataRow(120.0001)]
+	[DataRow(86400.0001)]
+	public void ATinyFinalRemainder_EndsTheArcOnTheKeplerOrbit(double durationSeconds)
+	{
+		// With the step capped at 30 s, the arc ends on a clipped step of 1e-4 s, under the 2e-4 s that
+		// the largest growth can lift past the default floor. The arc has to be returned, on the orbit.
+		IStorageMath<double> math = DoubleStorageMath.Instance;
+		Cowell<double> cowell = new(new TwoBody<double>(Mu, math), math);
+		CowellTolerance capped = CowellTolerance.Default with { MaximumStepSeconds = 30.0, InitialStepSeconds = 30.0 };
+		CartesianState<double> start = new(7000.0, 0.0, 0.0, 0.0, 4.6875, 5.90625);
+
+		CowellResult<double> result = cowell.Propagate(start, durationSeconds, capped);
+		TwoBodyState<double> expected = Keplerian<double>.Propagate(
+			new TwoBodyState<double>(start.X, start.Y, start.Z, start.VelocityX, start.VelocityY, start.VelocityZ),
+			durationSeconds,
+			Mu,
+			math).State;
+
+		CartesianState<double> end = result.State;
+		double positionError = Math.Sqrt(Square(end.X - expected.X) + Square(end.Y - expected.Y) + Square(end.Z - expected.Z));
+
+		Assert.AreEqual(durationSeconds, result.ElapsedSeconds);
+		Assert.IsLessThan(1e-6, positionError, $"{positionError:E3} km from the Kepler orbit.");
+	}
+
+	[TestMethod]
 	public void AToleranceFinerThanTheStorageType_IsRefusedRatherThanSpunOn()
 	{
 		// float resolves about half a metre at 7000 km, so its error estimate never falls below a
